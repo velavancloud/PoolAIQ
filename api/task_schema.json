@@ -1,0 +1,95 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PoolAIQ Task",
+  "description": "A single actionable task presented to the user, generated from an approved recommendation.",
+  "type": "object",
+  "required": ["task_id", "pool_id", "instruction", "status", "human_approved"],
+  "properties": {
+    "task_id": { "type": "string", "format": "uuid" },
+    "pool_id": { "type": "string", "format": "uuid" },
+    "generated_by_recommendation_id": { "type": ["string", "null"], "format": "uuid" },
+
+    "instruction": {
+      "type": "string",
+      "description": "Exact human-readable instruction, e.g. 'Add 54 oz (3 lbs 6 oz) Power Powder Plus shock. Dissolve in a bucket of pool water first, then pour slowly around the pool perimeter with the pump running.'"
+    },
+
+    "product_name": { "type": ["string", "null"] },
+    "amount": { "type": ["number", "null"] },
+    "unit": { "type": ["string", "null"], "enum": ["oz", "lbs", "gal", null] },
+
+    "requires_wait_before_next_hours": { "type": ["number", "null"] },
+    "depends_on_task_id": { "type": ["string", "null"], "format": "uuid" },
+
+    "status": {
+      "type": "string",
+      "enum": ["pending_approval", "approved", "notified", "completed", "skipped", "expired"]
+    },
+
+    "scheduled_for": { "type": ["string", "null"], "format": "date-time" },
+    "completed_at": { "type": ["string", "null"], "format": "date-time" },
+
+    "human_approved": {
+      "type": "boolean",
+      "description": "Hard gate. No notification may be sent while this is false, regardless of any other field."
+    },
+    "approved_by": { "type": ["string", "null"], "enum": ["owner", "licensed_pro", null] },
+
+    "commerce_hook": {
+      "type": ["object", "null"],
+      "properties": {
+        "needed": { "type": "boolean" },
+        "product_match": { "type": ["string", "null"] },
+        "retailer": { "type": ["string", "null"], "enum": ["leslies", "amazon", "instacart", null] },
+        "cart_deeplink": { "type": ["string", "null"], "format": "uri" },
+        "auto_purchase": {
+          "type": "boolean",
+          "const": false,
+          "description": "Always false in v1. Deep-links to a cart only; never auto-completes purchase."
+        }
+      }
+    },
+
+    "notification_plan": {
+      "type": "object",
+      "properties": {
+        "channel": { "type": "string", "enum": ["sms", "push", "both"] },
+        "send_at": { "type": ["string", "null"], "format": "date-time" },
+        "reminder_if_incomplete_after_hours": { "type": ["number", "null"] }
+      }
+    },
+
+    "on_complete": {
+      "type": "object",
+      "description": "What happens when user marks this task done via SMS reply or push action.",
+      "properties": {
+        "log_chemical_addition": { "type": "boolean", "default": true },
+        "unlock_dependent_task_id": { "type": ["string", "null"], "format": "uuid" },
+        "prompt_retest": { "type": "boolean" },
+        "retest_delay_hours": { "type": ["number", "null"] }
+      }
+    }
+  },
+
+  "examples": [
+    {
+      "task_id": "b3f1...",
+      "pool_id": "a12c...",
+      "generated_by_recommendation_id": "d90e...",
+      "instruction": "Add 8 oz muriatic acid slowly near return jets, pump running. This is a conservative dose because pH has overcorrected twice recently.",
+      "product_name": "Muriatic Acid",
+      "amount": 8,
+      "unit": "oz",
+      "requires_wait_before_next_hours": 4,
+      "depends_on_task_id": null,
+      "status": "notified",
+      "scheduled_for": "2026-07-01T18:45:00-04:00",
+      "completed_at": null,
+      "human_approved": true,
+      "approved_by": "owner",
+      "commerce_hook": { "needed": false, "auto_purchase": false },
+      "notification_plan": { "channel": "sms", "send_at": "2026-07-01T18:45:00-04:00", "reminder_if_incomplete_after_hours": 2 },
+      "on_complete": { "log_chemical_addition": true, "unlock_dependent_task_id": "f77a...", "prompt_retest": true, "retest_delay_hours": 4 }
+    }
+  ]
+}
