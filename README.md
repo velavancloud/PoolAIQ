@@ -28,7 +28,7 @@ it is built. Here is what's real vs. designed-but-not-built:
 | Task/notification engine | **Not built** | `api/task_schema.json` documents the intended shape; no SMS/push code exists |
 | Commerce hook | **Not built** | Documented in Section 3 only |
 | MCP (tool-use protocol) | **Built** | Real MCP server (`mcp_server/`) with two tools — `find_product` and `send_task_notification` — running over the actual stdio protocol (verified via a real MCP client subprocess handshake, not just decorated functions). See Section 3b. |
-| Multi-agent orchestration | **Not built, not previously claimed** | This is a single Flask app calling two Python functions sequentially — one LLM call (extraction) and one deterministic function (reasoning). Not a multi-agent system. |
+| Multi-agent orchestration | **Built** | Three agents (`agents/`) with a strictly typed message-passing contract, coordinated by an orchestrator. The Safety Agent has genuine, independently-enforced veto authority over the Reasoning Agent's output — demonstrated live via a constructed case where the Reasoning Agent proposes a chemical addition with no awareness of an active wait window, and the Safety Agent blocks it before it reaches a human. See Section 3c. |
 
 **Why this table exists:** an earlier draft of this README described the
 target architecture in a way that could be misread as describing what was
@@ -285,6 +285,91 @@ effect.
   MCP SDK's auth support (visible in the SDK's `mcp.server.auth` module,
   not used here).
 
+## 3c. Multi-Agent — Genuine Separation of Authority, Not Renamed Functions
+
+### The question that had to be answered honestly first
+
+Before building this, the real question wasn't "how do we add multi-agent" —
+it was "does splitting this into multiple agents actually improve anything,
+or would it just be architecture theater on top of code that already works
+as one function?" The honest answer: a naive 3-way split (Extraction Agent,
+Reasoning Agent, "Safety Agent" that's just a third LLM call reviewing the
+second one's output) would have been theater, and arguably worse than the
+monolith — an LLM checking another LLM's safety output is still one class
+of system checking itself, just with extra latency and a diagram that looks
+more impressive.
+
+### What was actually built instead
+
+Three agents with a real authority boundary:
+
+- **Extraction Agent** (`agents/extraction_agent.py`) — photo → structured
+  readings. Same Claude vision call as before, now scoped to a
+  single-responsibility module with a typed input/output.
+- **Reasoning Agent** (`agents/reasoning_agent.py`) — extraction result →
+  diagnosis + proposal. Runs the same RAG retrieval and pattern-detection
+  logic as `prototype/reasoning_engine.py`, but with one deliberate change:
+  **the hard safety wait-window check was removed from this agent
+  entirely.** It has no code path that checks wait windows anymore.
+- **Safety Agent** (`agents/safety_agent.py`) — proposal → verdict. **Zero
+  LLM calls.** Every check is a deterministic Python function. Re-fetches
+  pool state independently rather than trusting the Reasoning Agent's view
+  of it. Can VETO a proposal outright, substituting a safe alternative that
+  is what actually reaches the human — the original proposal never does.
+
+### The proof, not just the claim
+
+`agents/orchestrator.py`'s `demo_veto_scenario()` constructs a real case
+from the timeline: a reading queried 15 minutes into an actual 4-hour acid
+wait window from the case study (the real June 30 acid addition at 6:45pm).
+The Reasoning Agent — which has no mechanism to check wait windows anymore —
+proposes adding shock. The Safety Agent, checking independently, catches
+this and vetoes it:
+
+```
+Reasoning Agent proposed: Correct free_chlorine_ppm toward ideal range...
+Safety Agent verdict: vetoed
+Safety Agent reason: Active wait window: a acid addition (24oz) at 06:45 PM
+  requires 3.8 more hour(s) before any new chemical addition.
+```
+
+This is verifiable by deleting the `safety_agent.run()` call from
+`orchestrator.py` — that exact case would then incorrectly surface a
+chemical-addition recommendation to a human 15 minutes after an acid dose.
+The separation is doing real work, not just providing a more elaborate
+diagram of the same function.
+
+Run it yourself: `python3 agents/orchestrator.py` — prints both the normal
+(approved) and veto cases side by side. Also wired into the webapp UI as
+Section 03, with two buttons ("Run normal case" / "Run veto case") that
+call the same orchestrator through `/api/analyze_agents`.
+
+### Honest tradeoffs, stated plainly
+
+- **In-process, not distributed.** All three agents currently run as
+  Python function calls within one process — not separate OS processes or
+  network services. The MESSAGE CONTRACT (`agents/messages.py`'s typed
+  dataclasses) is strictly enforced — no agent reaches into another's
+  internals, each only sees what the previous agent chose to put in its
+  output message — but the TRANSPORT is not distributed. A production
+  version could put each agent behind its own MCP server (see Section 3b)
+  using the same message dataclasses serialized to JSON across that
+  boundary, without changing the contract itself.
+- **Some duplication with `prototype/reasoning_engine.py`.** The
+  Reasoning Agent's pattern-detection logic (root-cause coupling, recurring
+  correction failure detection) currently re-implements calls into the same
+  underlying functions from `reasoning_engine.py` rather than that file
+  being fully decomposed into agent modules. This was a deliberate scope
+  decision for capstone timeline reasons — the two systems (direct
+  `recommend()` call vs. full agent pipeline) are kept side by side in the
+  webapp (`/api/analyze_demo` vs `/api/analyze_agents`) rather than one
+  replacing the other, so both remain inspectable.
+- **`_rule_max_single_dose` is a documented no-op.** The rule slot exists
+  in `safety_agent.py` but has nothing to check yet, because proposals
+  don't currently compute exact doses (the Reasoning Agent's instructions
+  say "use conservative dose," not a number). Stated as a known gap rather
+  than removed or hidden.
+
 ## 4. Core Design Principles
 
 1. **Memory over memory-less advice.** Every recommendation must cite what's already in the water and what's already been tried.
@@ -318,6 +403,7 @@ effect.
 - `api/task_schema.json` — task/notification object shape
 - `prototype/` — working, tested Python reasoning engine + RAG layer, replayed against the real timeline data (see `prototype/README.md`)
 - `mcp_server/` — real MCP server (product lookup + notification dispatch tools) with a protocol-level client test (see Section 3b)
+- `agents/` — three-agent system (Extraction/Reasoning/Safety) with a real, independently-enforced veto boundary — includes a runnable proof (`orchestrator.py`) that the Safety Agent catches what the Reasoning Agent cannot see (see Section 3c)
 
 ## 7. Evaluation / Success Metrics
 

@@ -314,3 +314,87 @@ function renderError(message) {
   confidenceFill.style.width = '0%';
   confidenceValue.textContent = '—';
 }
+
+
+// ---------- Multi-agent orchestration panel ----------
+
+const agentTrace = document.getElementById('agentTrace');
+const nodeExtraction = document.getElementById('nodeExtraction');
+const nodeReasoning = document.getElementById('nodeReasoning');
+const nodeSafety = document.getElementById('nodeSafety');
+const nodeExtractionDetail = document.getElementById('nodeExtractionDetail');
+const nodeReasoningDetail = document.getElementById('nodeReasoningDetail');
+const nodeSafetyDetail = document.getElementById('nodeSafetyDetail');
+const agentVerdictBlock = document.getElementById('agentVerdictBlock');
+const agentVerdictText = document.getElementById('agentVerdictText');
+const agentCheckedRules = document.getElementById('agentCheckedRules');
+const verdictLabel = document.getElementById('verdictLabel');
+
+async function runAgentScenario(scenario) {
+  agentTrace.hidden = false;
+  nodeExtraction.className = 'agent-node';
+  nodeReasoning.className = 'agent-node';
+  nodeSafety.className = 'agent-node';
+  nodeExtractionDetail.textContent = 'Running…';
+  nodeReasoningDetail.textContent = '';
+  nodeSafetyDetail.textContent = '';
+  agentVerdictBlock.className = 'agent-verdict-block';
+  agentVerdictText.textContent = '';
+  agentCheckedRules.innerHTML = '';
+
+  try {
+    const res = await fetch('/api/analyze_agents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario }),
+    });
+    const data = await res.json();
+    renderAgentTrace(data);
+  } catch (err) {
+    nodeExtractionDetail.textContent = 'Error: ' + err.message;
+  }
+}
+
+function renderAgentTrace(data) {
+  const ext = data.extraction;
+  const reasoning = data.reasoning;
+  const safety = data.safety;
+  const isVetoed = safety.verdict === 'vetoed';
+
+  nodeExtractionDetail.textContent = ext
+    ? `source: ${ext.source_type} · confidence ${Math.round(ext.extraction_confidence * 100)}%`
+    : 'no extraction data';
+
+  nodeReasoningDetail.textContent = `proposed: ${reasoning.proposed_action_type.replace(/_/g, ' ')}`;
+  nodeReasoning.className = isVetoed ? 'agent-node vetoed-source' : 'agent-node';
+
+  nodeSafetyDetail.textContent = isVetoed ? 'VETOED ⛔' : 'approved ✓';
+  nodeSafety.className = isVetoed ? 'agent-node vetoed-source' : 'agent-node approved-terminal';
+
+  agentVerdictBlock.className = 'agent-verdict-block ' + (isVetoed ? 'vetoed' : 'approved');
+  verdictLabel.textContent = isVetoed ? 'Safety Agent VETO' : 'Safety Agent Approval';
+
+  if (isVetoed) {
+    agentVerdictText.innerHTML =
+      `<strong>The Reasoning Agent's proposal was blocked before reaching a human.</strong><br><br>` +
+      `Reasoning Agent proposed: <em>"${reasoning.instructions}"</em><br><br>` +
+      `Safety Agent reason: ${safety.reason}<br><br>` +
+      `Given to the human instead: <em>"${safety.safe_alternative_instructions}"</em>`;
+  } else {
+    agentVerdictText.innerHTML =
+      `<strong>Reasoning Agent's proposal passed all safety checks and is forwarded for human approval.</strong><br><br>` +
+      `${reasoning.instructions}`;
+  }
+
+  agentCheckedRules.innerHTML = '';
+  (safety.checked_rules || []).forEach(rule => {
+    const chip = document.createElement('span');
+    const triggered = isVetoed && safety.reason.toLowerCase().includes(rule.split('_')[0]);
+    chip.className = 'rule-chip' + (triggered ? ' triggered' : '');
+    chip.textContent = rule.replace(/_/g, ' ');
+    agentCheckedRules.appendChild(chip);
+  });
+}
+
+document.getElementById('agentNormalBtn').addEventListener('click', () => runAgentScenario('normal'));
+document.getElementById('agentVetoBtn').addEventListener('click', () => runAgentScenario('veto'));

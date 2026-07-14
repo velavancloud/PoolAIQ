@@ -128,6 +128,45 @@
 
   </main>
 
+  <section class="agents-panel" aria-label="Multi-agent orchestration demo">
+    <h2 class="panel-title">03 — Three agents, one non-bypassable check</h2>
+    <p class="panel-sub">
+      Extraction Agent → Reasoning Agent → Safety Agent. The Safety Agent runs
+      independently of the Reasoning Agent and can veto its proposal outright —
+      demonstrated below with a real case from the timeline.
+    </p>
+
+    <div class="agent-scenario-buttons">
+      <button class="btn btn-secondary" id="agentNormalBtn">Run normal case</button>
+      <button class="btn btn-veto" id="agentVetoBtn">Run veto case</button>
+    </div>
+
+    <div class="agent-trace" id="agentTrace" hidden>
+      <div class="agent-flow">
+        <div class="agent-node" id="nodeExtraction">
+          <div class="agent-node-label">Extraction Agent</div>
+          <div class="agent-node-detail" id="nodeExtractionDetail"></div>
+        </div>
+        <div class="agent-arrow">→</div>
+        <div class="agent-node" id="nodeReasoning">
+          <div class="agent-node-label">Reasoning Agent</div>
+          <div class="agent-node-detail" id="nodeReasoningDetail"></div>
+        </div>
+        <div class="agent-arrow">→</div>
+        <div class="agent-node" id="nodeSafety">
+          <div class="agent-node-label">Safety Agent</div>
+          <div class="agent-node-detail" id="nodeSafetyDetail"></div>
+        </div>
+      </div>
+
+      <div class="agent-verdict-block" id="agentVerdictBlock">
+        <div class="block-label" id="verdictLabel">Verdict</div>
+        <p class="agent-verdict-text" id="agentVerdictText"></p>
+        <div class="agent-checked-rules" id="agentCheckedRules"></div>
+      </div>
+    </div>
+  </section>
+
   <footer class="foot">
     <span>PoolAIQ — grounded in a real 2-month recovery timeline</span>
     <a href="https://github.com/velavancloud/PoolAIQ" target="_blank" rel="noopener">github.com/velavancloud/PoolAIQ</a>

@@ -624,6 +624,141 @@ body {
   margin-left: 6px;
 }
 
+/* ---------- Multi-agent panel ---------- */
+
+.agents-panel {
+  padding: 32px;
+  border-top: 2px solid var(--pool-deep);
+  background: var(--paper-dim);
+}
+
+.agent-scenario-buttons {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  max-width: 400px;
+}
+
+.btn-secondary {
+  background: var(--pool-mid);
+  color: white;
+  width: auto;
+  flex: 1;
+  margin-top: 0;
+}
+
+.btn-veto {
+  background: white;
+  color: var(--coral);
+  border: 1.5px solid var(--coral);
+  width: auto;
+  flex: 1;
+  margin-top: 0;
+}
+.btn-veto:hover { background: #FBF0EC; }
+
+.agent-trace {
+  max-width: 900px;
+}
+
+.agent-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.agent-node {
+  flex: 1;
+  background: white;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.agent-node.vetoed-source {
+  border-color: var(--coral);
+  background: #FEF9F8;
+}
+
+.agent-node.approved-terminal {
+  border-color: var(--sage);
+  background: #F7FBF6;
+}
+
+.agent-node-label {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--pool-deep);
+  margin-bottom: 8px;
+}
+
+.agent-node-detail {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.agent-arrow {
+  display: flex;
+  align-items: center;
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--line);
+  font-weight: 700;
+}
+
+.agent-verdict-block {
+  background: white;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  transition: border-color 0.2s ease;
+}
+
+.agent-verdict-block.vetoed {
+  border-color: var(--coral);
+  background: #FEF9F8;
+}
+
+.agent-verdict-block.approved {
+  border-color: var(--sage);
+  background: #F7FBF6;
+}
+
+.agent-verdict-text {
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 10px 0;
+  color: var(--ink);
+}
+
+.agent-checked-rules {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rule-chip {
+  font-family: var(--font-display);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  background: var(--paper-dim);
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+}
+
+.rule-chip.triggered {
+  background: var(--coral);
+  color: white;
+  border-color: var(--coral);
+}
+
 /* ---------- Footer ---------- */
 
 .foot {

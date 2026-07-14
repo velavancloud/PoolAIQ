@@ -35,6 +35,15 @@ from case_study_data import build_case_study_state  # noqa: E402
 # for why this boundary matters.
 from mcp_client import find_product_via_mcp, send_notification_via_mcp  # noqa: E402
 
+# Multi-agent orchestrator — a SEPARATE code path from recommend() above,
+# deliberately kept side by side rather than silently replacing it. This
+# lets the demo show both: the direct reasoning-engine call (simpler,
+# faster, what /api/analyze_demo already used) and the full three-agent
+# pipeline with a real, independently-checked Safety Agent veto boundary
+# (/api/analyze_agents). See agents/README.md and README.md Section 3c.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "agents"))
+import orchestrator  # noqa: E402
+
 app = Flask(__name__)
 
 EXTRACTION_PROMPT_PATH = os.path.join(
@@ -252,6 +261,81 @@ def analyze_demo():
         "recommendation": recommendation,
         "history_length_used": len(state.readings),
     })
+
+
+def _trace_to_dict(trace) -> dict:
+    """Serializes an OrchestrationTrace (agents/messages.py dataclasses)
+    into JSON-safe dicts for the UI. Kept as an explicit function rather
+    than a generic dataclass->dict dump so the field ordering matches what
+    the UI expects, and so datetime objects get isoformat()'d."""
+    from dataclasses import asdict
+
+    extraction_dict = asdict(trace.extraction) if trace.extraction else None
+    reasoning_dict = asdict(trace.reasoning)
+    safety_dict = asdict(trace.safety)
+
+    # forwarded_proposal / vetoed_proposal are themselves ReasoningProposal
+    # dataclasses nested inside SafetyVerdict — asdict() already recurses
+    # into them correctly, so no extra handling needed there.
+
+    return {
+        "extraction": extraction_dict,
+        "reasoning": reasoning_dict,
+        "safety": safety_dict,
+        "completed_at": trace.completed_at.isoformat(),
+    }
+
+
+@app.route("/api/analyze_agents", methods=["POST"])
+def analyze_agents():
+    """
+    Runs the FULL three-agent pipeline (Extraction -> Reasoning -> Safety)
+    via agents/orchestrator.py, as opposed to /api/analyze_demo's direct
+    call to reasoning_engine.recommend(). Two demo scenarios:
+
+      - scenario='normal': a stable reading, Safety Agent approves
+      - scenario='veto': agents/orchestrator.py's demo_veto_scenario() —
+        a reading queried 15 minutes into a real 4-hour acid wait window.
+        The Reasoning Agent (which no longer checks wait windows at all —
+        that logic was removed from it in the multi-agent refactor)
+        proposes a chemical addition anyway. The Safety Agent, checking
+        independently, vetoes it before it would reach a human. This is
+        the single clearest piece of evidence that the three agents have
+        genuine, separately-enforced authority rather than being one
+        function split into three files for the sake of a diagram.
+    """
+    from datetime import timedelta as _td
+
+    body = request.get_json(force=True) or {}
+    scenario = body.get("scenario", "normal")
+
+    if scenario == "veto":
+        trace = orchestrator.demo_veto_scenario()
+    else:
+        state_module = sys.modules.get("case_study_data") or __import__("case_study_data")
+        state = build_case_study_state()
+        readings = {
+            "free_chlorine_ppm": 6.29, "total_chlorine_ppm": 6.29, "ph": 7.7,
+            "total_alkalinity_ppm": 115, "cyanuric_acid_ppm": 48,
+        }
+        as_of = state.readings[-1].read_at + _td(hours=1)
+        trace = orchestrator.orchestrate_from_known_reading(readings, "demo_pool", as_of)
+
+    result = _trace_to_dict(trace)
+
+    # Only enrich with a product lookup if the Safety Agent actually
+    # approved — a vetoed proposal should never get a "here's where to buy
+    # it" card, since the human is never being asked to act on it.
+    if trace.safety.verdict == "approved" and trace.safety.forwarded_proposal:
+        category = trace.safety.forwarded_proposal.proposed_product_category
+        if category and category != "unknown":
+            try:
+                result["safety"]["forwarded_proposal"]["product_lookup"] = \
+                    find_product_via_mcp(product_category=category)
+            except Exception as e:
+                result["safety"]["forwarded_proposal"]["product_lookup_error"] = str(e)
+
+    return jsonify(result)
 
 
 @app.route("/api/approve", methods=["POST"])

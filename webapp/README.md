@@ -49,6 +49,14 @@ demoing somewhere without reliable wifi/API access.
   direct Python imports. See `../README.md` Section 3b for the full
   architecture and `../mcp_server/test_mcp_client.py` for a protocol-level
   test independent of the webapp.
+- **Multi-agent orchestration**: Section 03 of the page ("Three agents, one
+  non-bypassable check") calls `/api/analyze_agents`, which runs the real
+  `../agents/orchestrator.py` pipeline — not a UI-only simulation. The
+  "Run veto case" button triggers `orchestrator.demo_veto_scenario()`,
+  where the Reasoning Agent (which has no code path to check wait windows
+  anymore) proposes a chemical addition, and the Safety Agent —
+  independently, with zero LLM calls — blocks it. See `../README.md`
+  Section 3c.
 
 ## What's simplified for the demo (be upfront about this to the panel)
 
@@ -115,6 +123,30 @@ demoing somewhere without reliable wifi/API access.
    with the SDK's own protocol-level logging (`ListToolsRequest`,
    `CallToolRequest`) visible in the output. This is the strongest single
    piece of evidence that the MCP integration isn't decorative.
+
+8. **Scroll to Section 03 — "Three agents, one non-bypassable check."**
+   Click **"Run normal case"** first — walk through the three agent nodes
+   lighting up left to right, ending in a calm sage-green "approved" verdict.
+
+   Then click **"Run veto case."** This is the strongest moment in the
+   whole demo — build it up: *"This is a real case from the timeline —
+   15 minutes after a real acid addition, well inside its 4-hour wait
+   window. The Reasoning Agent doesn't check wait windows anymore — I
+   removed that logic from it on purpose, so this proposal is unaware
+   it's unsafe."* Point at the Reasoning Agent node turning coral, then
+   the Safety Agent node. *"The Safety Agent re-checks the pool's state
+   completely independently — it doesn't trust anything the Reasoning
+   Agent assumed — and blocks it. What the human would have seen is not
+   the chemical recommendation; it's this safe alternative instead."*
+
+   **If pushed on whether this is 'real' multi-agent or just a diagram:**
+   say plainly that the transport is in-process (documented, not hidden —
+   see README.md Section 3c), but the AUTHORITY boundary is real: run
+   `python3 ../agents/orchestrator.py` in a terminal to show the same
+   veto happening completely outside the webapp, then offer to open
+   `agents/reasoning_agent.py` and show there is no wait-window check
+   anywhere in that file — the Safety Agent is not decorative, it is the
+   only thing in the system that catches this case.
 
 ## Known rough edges (own these, don't hide them)
 
