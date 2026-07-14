@@ -21,7 +21,7 @@ it is built. Here is what's real vs. designed-but-not-built:
 | Component | Status | Detail |
 |---|---|---|
 | Vision extraction | **Built** | Live Claude API call in `webapp/app.py`, using `prompts/extraction_prompt.md` verbatim |
-| Pool state store | **Built (in-memory)** | `prototype/case_study_data.py` — a hardcoded Python object standing in for the `schema/pool_state.sql` database. No persistence between requests. |
+| Pool state store | **Built (hybrid: fixed + JSON persistence)** | `prototype/case_study_data.py` remains a fixed, hardcoded 7-reading dataset (never modified). `webapp/reading_store.py` + `webapp/merged_state.py` add real persistence ON TOP of it — new readings from live uploads survive across requests and feed back into subsequent reasoning. Not the full `schema/pool_state.sql` database design, but no longer "no persistence between requests" either. See Section 3d. |
 | Reasoning / recommendation engine | **Built** | `prototype/reasoning_engine.py` — deterministic rules + trend detection, tested against real case-study data |
 | RAG retrieval layer | **Built** | Real TF-IDF + cosine-similarity retrieval over two corpora (general chemistry KB + this pool's history), built fresh per-request in `prototype/rag/`, surfaced in the UI with source attribution. See Section 3a for the honest tradeoffs (in-memory index, lexical not semantic matching, small seed KB). |
 | Human-in-the-loop approval | **Built (UI only)** | Approve/Reject buttons work and gate the demo flow, but don't write to a real task queue |
@@ -370,6 +370,73 @@ call the same orchestrator through `/api/analyze_agents`.
   say "use conservative dose," not a number). Stated as a known gap rather
   than removed or hidden.
 
+## 3d. Persistence — New Uploads Actually Become History
+
+### The gap this closes
+
+Every previous version of `/api/analyze` did the same thing: extract a
+reading, append it to a COPY of the fixed case-study history, reason over
+that copy once, and discard it. The next upload started from the same
+fixed 7 readings again — nothing a user uploaded ever accumulated, and the
+"full history" the README kept promising was, for any reading you actually
+uploaded yourself, a lie by omission: your reading was never really part of
+history for the NEXT analysis.
+
+### What's built now
+
+- `webapp/reading_store.py` — appends new readings to a JSON file
+  (`webapp/data/added_readings.json`), separate from and never modifying
+  `prototype/case_study_data.py`'s fixed dataset
+- `webapp/merged_state.py` — builds a single chronological `PoolState`
+  combining the fixed 7 readings with everything persisted since, sorted
+  by timestamp (not append-order, in case of out-of-order demo timestamps)
+- `agents/reasoning_agent.py` and `agents/safety_agent.py` both now accept
+  an optional `state_builder` parameter (default: the fixed case-study
+  dataset, so every prior test/demo is unaffected) — the webapp passes
+  `build_merged_state` instead, so both the Reasoning Agent's pattern
+  detection AND the Safety Agent's independent wait-window check see live
+  persisted readings, not just the frozen 7
+- `/api/analyze` now runs the FULL three-agent pipeline (previously it
+  called `reasoning_engine.recommend()` directly, skipping the Safety
+  Agent entirely) against the merged state, and persists the result
+  regardless of the Safety Agent's verdict — a vetoed reading is still
+  real data worth keeping in the trend
+- `/api/trend` serves the merged history for the new Section 04 trend
+  chart/table in the UI; `/api/trend/reset` clears persisted additions
+  back to the original 7 for repeated demo rehearsals
+
+### Verified
+
+A synthetic reading with elevated pH and alkalinity, persisted through this
+pipeline, was confirmed to trigger the SAME `check_alkalinity_ph_coupling`
+root-cause detector described in Section 3c — proving new uploads
+genuinely participate in the pattern-detection logic against the real
+historical timeline, not just get appended to a display list. Full
+read-write-read round trip confirmed: reading persisted → `/api/trend`
+reflects it → a second simulated upload's reasoning call sees the first
+one in its history.
+
+### Honest limitations
+
+- **Untested against the literal Anthropic vision API call in this
+  environment** (no API key available in the sandbox this was built in).
+  Every other link in the chain — extraction via the same code path demo
+  scenarios use, reasoning, safety check, persistence, trend serving, UI
+  rendering — was independently verified. The vision API call itself is
+  unchanged, previously-working code from earlier commits.
+- **JSON file, no locking beyond a single in-process thread lock.** Stated
+  in `reading_store.py`'s docstring: fine for one local demo user, would
+  corrupt under real concurrent multi-user writes. `schema/pool_state.sql`
+  already documents what a real production schema looks like — this is
+  explicitly a demo-appropriate substitute, not a claim of production
+  readiness.
+- **A vetoed reading still gets persisted.** This was a deliberate choice
+  (the reading itself is real data, independent of what the system
+  recommended doing about it) but means the trend table can show a
+  "⛔ vetoed" row that a viewer might misread as "this reading was
+  rejected/discarded" rather than "a proposed ACTION in response to this
+  reading was blocked." Worth clarifying if it comes up live.
+
 ## 4. Core Design Principles
 
 1. **Memory over memory-less advice.** Every recommendation must cite what's already in the water and what's already been tried.
@@ -404,6 +471,7 @@ call the same orchestrator through `/api/analyze_agents`.
 - `prototype/` — working, tested Python reasoning engine + RAG layer, replayed against the real timeline data (see `prototype/README.md`)
 - `mcp_server/` — real MCP server (product lookup + notification dispatch tools) with a protocol-level client test (see Section 3b)
 - `agents/` — three-agent system (Extraction/Reasoning/Safety) with a real, independently-enforced veto boundary — includes a runnable proof (`orchestrator.py`) that the Safety Agent catches what the Reasoning Agent cannot see (see Section 3c)
+- `webapp/reading_store.py`, `webapp/merged_state.py` — persistence layer so live-uploaded readings actually accumulate into history and affect subsequent reasoning, not just get displayed once and discarded (see Section 3d)
 
 ## 7. Evaluation / Success Metrics
 

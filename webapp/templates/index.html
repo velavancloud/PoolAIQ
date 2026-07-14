@@ -167,6 +167,39 @@
     </div>
   </section>
 
+  <section class="trend-panel" aria-label="Reading history trend">
+    <div class="trend-header">
+      <div>
+        <h2 class="panel-title">04 — Trend over time</h2>
+        <p class="panel-sub">
+          Every approved analysis is persisted and folded into this chart — new uploads
+          actually change what the system reasons over next time, not just what you see once.
+        </p>
+      </div>
+      <button class="btn btn-reset" id="resetTrendBtn">Reset demo data</button>
+    </div>
+
+    <div class="trend-metric-tabs" id="trendMetricTabs">
+      <button class="metric-tab active" data-metric="ph">pH</button>
+      <button class="metric-tab" data-metric="free_chlorine_ppm">Free Cl</button>
+      <button class="metric-tab" data-metric="total_alkalinity_ppm">Alkalinity</button>
+      <button class="metric-tab" data-metric="cyanuric_acid_ppm">CYA</button>
+    </div>
+
+    <div class="trend-chart-wrap">
+      <svg id="trendChart" viewBox="0 0 960 260" preserveAspectRatio="xMidYMid meet"></svg>
+    </div>
+
+    <table class="trend-table" id="trendTable">
+      <thead>
+        <tr>
+          <th>Date</th><th>Source</th><th>pH</th><th>FCl</th><th>ALK</th><th>CYA</th><th>Note</th>
+        </tr>
+      </thead>
+      <tbody id="trendTableBody"></tbody>
+    </table>
+  </section>
+
   <footer class="foot">
     <span>PoolAIQ — grounded in a real 2-month recovery timeline</span>
     <a href="https://github.com/velavancloud/PoolAIQ" target="_blank" rel="noopener">github.com/velavancloud/PoolAIQ</a>

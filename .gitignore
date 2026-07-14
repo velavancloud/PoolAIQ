@@ -19,3 +19,4 @@ Thumbs.db
 # Flask
 instance/
 *.log
+webapp/data/added_readings.json

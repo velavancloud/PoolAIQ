@@ -96,7 +96,8 @@ RULES = [
 ]
 
 
-def run(proposal: ReasoningProposal, pool_id: str, as_of: datetime = None) -> SafetyVerdict:
+def run(proposal: ReasoningProposal, pool_id: str, as_of: datetime = None,
+        state_builder=None) -> SafetyVerdict:
     """
     The agent's single entry point. Takes a ReasoningProposal (and enough
     context to re-check state independently — pool_id, as_of), returns a
@@ -108,9 +109,16 @@ def run(proposal: ReasoningProposal, pool_id: str, as_of: datetime = None) -> Sa
     the Reasoning Agent were compromised, buggy, or simply lagging on stale
     data, the Safety Agent's own independent lookup is what actually
     protects the user, not shared trust in upstream correctness.
+
+    state_builder: same injection pattern as reasoning_agent.run() — lets
+    the webapp supply build_merged_state so the Safety Agent's independent
+    wait-window check also sees live-persisted additions, not just the
+    fixed case-study dataset. Defaults to build_case_study_state, so every
+    existing call site (including demo_veto_scenario) is unaffected.
     """
     as_of = as_of or datetime.now()
-    state = build_case_study_state()  # stands in for the same pool_id-keyed lookup
+    builder = state_builder or build_case_study_state
+    state = builder()  # stands in for the same pool_id-keyed lookup
 
     checked = []
     for rule_name, rule_fn in RULES:

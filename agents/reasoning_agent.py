@@ -49,7 +49,7 @@ def _reading_from_extraction(extraction, as_of: datetime) -> Reading:
     )
 
 
-def run(request: ReasoningRequest) -> ReasoningProposal:
+def run(request: ReasoningRequest, state_builder=None) -> ReasoningProposal:
     """
     The agent's single entry point. NOTE: this function deliberately does
     NOT call reasoning_engine.recommend() — that function's hard safety
@@ -57,13 +57,22 @@ def run(request: ReasoningRequest) -> ReasoningProposal:
     Agent for the multi-agent version, so this function only runs the
     diagnosis/pattern-detection half. See safety_agent.py for the other
     half, and orchestrator.py for how they're recombined.
+
+    state_builder: optional callable returning a fresh PoolState, standing
+    in for "look up this pool_id's history." Defaults to the fixed
+    case-study dataset (build_case_study_state) — every existing call site
+    and test keeps working unchanged. The webapp's merged_state.py passes
+    build_merged_state instead, so live-uploaded readings that have been
+    persisted are included in what this agent reasons over, without this
+    agent needing to know anything about JSON files or persistence — it
+    just calls whatever builder it's given, exactly like a real
+    pool_id-keyed lookup would.
     """
-    # This agent is responsible for its own history lookup — a real
-    # distributed Reasoning Agent would query a pool-state service by
-    # pool_id, not receive pre-fetched history from the caller.
-    state = build_case_study_state()  # stands in for a pool_id-keyed lookup
+    builder = state_builder or build_case_study_state
+    state = builder()  # stands in for a pool_id-keyed lookup
     new_reading = _reading_from_extraction(request.extraction, request.as_of)
     state.readings.append(new_reading)
+    state.readings.sort(key=lambda r: r.read_at)
 
     latest = state.readings[-1]
 

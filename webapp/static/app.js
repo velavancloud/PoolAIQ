@@ -81,6 +81,9 @@ analyzeBtn.addEventListener('click', async () => {
       renderError(data.error);
     } else {
       renderResult(data);
+      if (data.persisted) {
+        loadTrend();  // refresh the trend chart/table with the newly persisted reading
+      }
     }
   } catch (err) {
     renderError('Could not reach the server: ' + err.message);
@@ -398,3 +401,124 @@ function renderAgentTrace(data) {
 
 document.getElementById('agentNormalBtn').addEventListener('click', () => runAgentScenario('normal'));
 document.getElementById('agentVetoBtn').addEventListener('click', () => runAgentScenario('veto'));
+
+
+// ---------- Trend chart + table (Section 04) ----------
+
+const trendChart = document.getElementById('trendChart');
+const trendTableBody = document.getElementById('trendTableBody');
+const resetTrendBtn = document.getElementById('resetTrendBtn');
+const trendMetricTabs = document.getElementById('trendMetricTabs');
+
+let currentMetric = 'ph';
+let trendData = null;
+
+const METRIC_COLORS = {
+  ph: '#2C7A7B',
+  free_chlorine_ppm: '#C08A2E',
+  total_alkalinity_ppm: '#D65A45',
+  cyanuric_acid_ppm: '#7A9B76',
+};
+
+async function loadTrend() {
+  try {
+    const res = await fetch('/api/trend');
+    trendData = await res.json();
+    renderTrendChart();
+    renderTrendTable();
+  } catch (err) {
+    console.error('Failed to load trend:', err);
+  }
+}
+
+function renderTrendChart() {
+  if (!trendData) return;
+  const readings = trendData.readings.filter(r => r[currentMetric] !== null && r[currentMetric] !== undefined);
+  if (readings.length === 0) {
+    trendChart.innerHTML = '<text x="480" y="130" text-anchor="middle" fill="#5B6B66" font-size="13">No data for this metric yet.</text>';
+    return;
+  }
+
+  const W = 960, H = 260, PAD = 40;
+  const values = readings.map(r => r[currentMetric]);
+  const range = trendData.ideal_ranges[currentMetric];
+
+  let minV = Math.min(...values, range ? range[0] : Infinity);
+  let maxV = Math.max(...values, range ? range[1] : -Infinity);
+  const pad = (maxV - minV) * 0.15 || 1;
+  minV -= pad; maxV += pad;
+
+  const x = i => PAD + (i / Math.max(readings.length - 1, 1)) * (W - PAD * 2);
+  const y = v => H - PAD - ((v - minV) / (maxV - minV)) * (H - PAD * 2);
+
+  let svg = '';
+
+  // ideal range band
+  if (range) {
+    svg += `<rect x="${PAD}" y="${y(range[1])}" width="${W - PAD * 2}" height="${y(range[0]) - y(range[1])}" fill="#7A9B76" opacity="0.12" />`;
+    svg += `<text x="${W - PAD}" y="${y(range[1]) - 4}" text-anchor="end" font-size="10" fill="#7A9B76" font-family="JetBrains Mono, monospace">ideal ${range[0]}-${range[1]}</text>`;
+  }
+
+  // axis line
+  svg += `<line x1="${PAD}" y1="${H - PAD}" x2="${W - PAD}" y2="${H - PAD}" stroke="#D9D4C6" stroke-width="1" />`;
+
+  // line path
+  const color = METRIC_COLORS[currentMetric] || '#1B4B4F';
+  const points = readings.map((r, i) => `${x(i)},${y(r[currentMetric])}`).join(' ');
+  svg += `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="2.5" />`;
+
+  // points, styled differently for newly-added readings
+  readings.forEach((r, i) => {
+    const isNew = r.is_new;
+    svg += `<circle cx="${x(i)}" cy="${y(r[currentMetric])}" r="${isNew ? 6 : 4}" fill="${isNew ? '#D65A45' : color}" stroke="white" stroke-width="1.5" />`;
+    if (i === 0 || i === readings.length - 1 || isNew) {
+      const dateLabel = new Date(r.read_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      svg += `<text x="${x(i)}" y="${H - PAD + 16}" text-anchor="middle" font-size="9" fill="#5B6B66" font-family="JetBrains Mono, monospace">${dateLabel}</text>`;
+    }
+  });
+
+  trendChart.innerHTML = svg;
+}
+
+function renderTrendTable() {
+  if (!trendData) return;
+  trendTableBody.innerHTML = '';
+  // most recent first
+  const rows = [...trendData.readings].reverse();
+  rows.forEach(r => {
+    const tr = document.createElement('tr');
+    if (r.is_new) tr.className = 'trend-row-new';
+    const date = new Date(r.read_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    const note = r.is_new
+      ? (r.safety_verdict === 'vetoed' ? '⛔ vetoed' : '✓ new — ' + (r.diagnosis || '').slice(0, 60))
+      : '';
+    tr.innerHTML = `
+      <td>${date}</td>
+      <td>${r.source}${r.is_new ? ' <span class="new-badge">NEW</span>' : ''}</td>
+      <td>${r.ph ?? '—'}</td>
+      <td>${r.free_chlorine_ppm ?? '—'}</td>
+      <td>${r.total_alkalinity_ppm ?? '—'}</td>
+      <td>${r.cyanuric_acid_ppm ?? '—'}</td>
+      <td class="trend-note">${note}</td>
+    `;
+    trendTableBody.appendChild(tr);
+  });
+}
+
+trendMetricTabs.addEventListener('click', (e) => {
+  const btn = e.target.closest('.metric-tab');
+  if (!btn) return;
+  document.querySelectorAll('.metric-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  currentMetric = btn.dataset.metric;
+  renderTrendChart();
+});
+
+resetTrendBtn.addEventListener('click', async () => {
+  if (!confirm('Reset all uploaded readings back to the original 7-reading case study? This cannot be undone.')) return;
+  await fetch('/api/trend/reset', { method: 'POST' });
+  loadTrend();
+});
+
+// Load the trend on page load so the chart isn't empty before any upload
+loadTrend();

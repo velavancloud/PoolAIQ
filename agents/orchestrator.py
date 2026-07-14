@@ -51,9 +51,14 @@ import safety_agent  # noqa: E402
 
 
 def orchestrate_from_photo(image_bytes: bytes, media_type: str, pool_id: str,
-                            as_of: datetime = None) -> OrchestrationTrace:
+                            as_of: datetime = None, state_builder=None) -> OrchestrationTrace:
     """Full live pipeline: photo -> Extraction Agent -> Reasoning Agent ->
-    Safety Agent -> trace. Used by the /api/analyze route."""
+    Safety Agent -> trace. Used by the /api/analyze route.
+
+    state_builder: forwarded to both reasoning_agent.run() and
+    safety_agent.run() unchanged — see reasoning_agent.py's docstring for
+    what this enables (the webapp injecting build_merged_state so live
+    persisted readings are included)."""
     as_of = as_of or datetime.now()
 
     extraction_result = extraction_agent.run(
@@ -61,10 +66,12 @@ def orchestrate_from_photo(image_bytes: bytes, media_type: str, pool_id: str,
     )
 
     reasoning_proposal = reasoning_agent.run(
-        ReasoningRequest(pool_id=pool_id, extraction=extraction_result, as_of=as_of)
+        ReasoningRequest(pool_id=pool_id, extraction=extraction_result, as_of=as_of),
+        state_builder=state_builder,
     )
 
-    safety_verdict = safety_agent.run(reasoning_proposal, pool_id=pool_id, as_of=as_of)
+    safety_verdict = safety_agent.run(reasoning_proposal, pool_id=pool_id, as_of=as_of,
+                                       state_builder=state_builder)
 
     return OrchestrationTrace(
         extraction=extraction_result,
@@ -75,7 +82,7 @@ def orchestrate_from_photo(image_bytes: bytes, media_type: str, pool_id: str,
 
 def orchestrate_from_known_reading(readings_dict: dict, pool_id: str,
                                     as_of: datetime, source_type: str = "demo_replay",
-                                    ) -> OrchestrationTrace:
+                                    state_builder=None) -> OrchestrationTrace:
     """
     Same pipeline, but skips the Extraction Agent's live vision call —
     used by the demo-replay scenarios. Still produces a proper
@@ -86,10 +93,12 @@ def orchestrate_from_known_reading(readings_dict: dict, pool_id: str,
     extraction_result = extraction_agent.run_from_known_reading(readings_dict, source_type)
 
     reasoning_proposal = reasoning_agent.run(
-        ReasoningRequest(pool_id=pool_id, extraction=extraction_result, as_of=as_of)
+        ReasoningRequest(pool_id=pool_id, extraction=extraction_result, as_of=as_of),
+        state_builder=state_builder,
     )
 
-    safety_verdict = safety_agent.run(reasoning_proposal, pool_id=pool_id, as_of=as_of)
+    safety_verdict = safety_agent.run(reasoning_proposal, pool_id=pool_id, as_of=as_of,
+                                       state_builder=state_builder)
 
     return OrchestrationTrace(
         extraction=extraction_result,

@@ -43,6 +43,16 @@ from mcp_client import find_product_via_mcp, send_notification_via_mcp  # noqa: 
 # (/api/analyze_agents). See agents/README.md and README.md Section 3c.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "agents"))
 import orchestrator  # noqa: E402
+from messages import ExtractionRequest, ReasoningRequest  # noqa: E402
+import extraction_agent as extraction_agent_module  # noqa: E402
+import reasoning_agent as reasoning_agent_module  # noqa: E402
+import safety_agent as safety_agent_module  # noqa: E402
+
+# Persistence layer — new readings from live uploads get appended here and
+# merged with the fixed case-study dataset on every subsequent request.
+# See reading_store.py and merged_state.py for the read/write design.
+from reading_store import add_reading, get_all_added_readings, clear_store  # noqa: E402
+from merged_state import build_merged_state  # noqa: E402
 
 app = Flask(__name__)
 
@@ -166,9 +176,29 @@ def get_history():
 @app.route("/api/analyze", methods=["POST"])
 def analyze():
     """
-    Core demo endpoint: accepts an uploaded photo, extracts readings via
-    Claude vision, merges into the real case-study history, and runs the
-    actual reasoning engine — demonstrating the full pipeline live.
+    Core demo endpoint: accepts an uploaded photo and runs the FULL
+    multi-agent pipeline (Extraction Agent -> Reasoning Agent -> Safety
+    Agent, via agents/orchestrator.py) against the MERGED state — the
+    fixed case-study history plus every reading persisted from a previous
+    upload in this session. This is the actual read+write loop:
+
+      1. Extraction Agent turns the photo into structured readings
+      2. Reasoning Agent + Safety Agent reason over merged_state.py's
+         build_merged_state() — original 7 readings + anything added since
+      3. If the Safety Agent approves, the new reading is PERSISTED via
+         reading_store.add_reading() — it becomes part of history for the
+         NEXT upload, and appears in the trend view (/api/trend)
+      4. If the Safety Agent vetoes, the reading is still persisted (it's
+         real data, worth keeping in the trend regardless of what the
+         system recommended doing about it) but the response makes the
+         veto clearly visible rather than silently downgrading it
+
+    This replaces the previous version of this endpoint, which called
+    reasoning_engine.recommend() directly against a copy of the fixed
+    history that was discarded after the request — no persistence, no
+    Safety Agent, no trend. See README.md Section 3d for why the older
+    /api/analyze_demo and /api/analyze_agents endpoints are kept
+    unchanged alongside this one rather than consolidated.
     """
     if "photo" not in request.files:
         return jsonify({"error": "No photo uploaded"}), 400
@@ -177,44 +207,152 @@ def analyze():
     image_bytes = file.read()
     media_type = file.content_type or "image/jpeg"
 
+    now = datetime.now()
+
     try:
-        extraction = extract_reading_from_photo(image_bytes, media_type)
+        extraction_result = extraction_agent_module.run(
+            ExtractionRequest(image_bytes=image_bytes, media_type=media_type)
+        )
     except Exception as e:
         return jsonify({"error": f"Vision extraction failed: {str(e)}"}), 500
 
-    readings_data = extraction.get("readings", {})
-    now = datetime.now()
-    new_reading = Reading(
-        read_at=now,
-        source=extraction.get("source_type", "home_strip"),
-        free_chlorine_ppm=readings_data.get("free_chlorine_ppm"),
-        total_chlorine_ppm=readings_data.get("total_chlorine_ppm"),
-        ph=readings_data.get("ph"),
-        total_alkalinity_ppm=readings_data.get("total_alkalinity_ppm"),
-        calcium_hardness_ppm=readings_data.get("calcium_hardness_ppm"),
-        cyanuric_acid_ppm=readings_data.get("cyanuric_acid_ppm"),
-        copper_ppm=readings_data.get("copper_ppm"),
-        phosphates_ppb=readings_data.get("phosphates_ppb"),
-        salt_ppm=readings_data.get("salt_ppm"),
+    reasoning_proposal = reasoning_agent_module.run(
+        ReasoningRequest(pool_id="demo_pool", extraction=extraction_result, as_of=now),
+        state_builder=build_merged_state,
+    )
+    safety_verdict = safety_agent_module.run(
+        reasoning_proposal, pool_id="demo_pool", as_of=now,
+        state_builder=build_merged_state,
     )
 
-    # THE KEY DEMONSTRATION: load the real historical state, append the new
-    # reading, and reason over the FULL timeline — not the new reading alone.
-    state = build_case_study_state()
-    state.readings.append(new_reading)
+    # Persist regardless of verdict — a vetoed reading is still real data
+    # that belongs in the trend; what changes is whether a chemical
+    # recommendation accompanies it.
+    stored_entry = add_reading(
+        extraction_result.readings,
+        source=extraction_result.source_type,
+        read_at=now,
+        diagnosis=reasoning_proposal.diagnosis,
+        safety_verdict=safety_verdict.verdict,
+    )
 
-    recommendation = recommend(state, now)
-    recommendation = enrich_with_product_lookup(recommendation)
-
-    return jsonify({
-        "extraction": extraction,
-        "new_reading": {
-            "read_at": now.isoformat(),
-            **readings_data,
+    result = {
+        "extraction": {
+            "source_type": extraction_result.source_type,
+            "extraction_confidence": extraction_result.extraction_confidence,
+            "readings": extraction_result.readings,
+            "notes": extraction_result.notes,
         },
-        "recommendation": recommendation,
-        "history_length_used": len(state.readings),
-    })
+        "new_reading": {"read_at": now.isoformat(), **extraction_result.readings},
+        "reasoning": {
+            "diagnosis": reasoning_proposal.diagnosis,
+            "root_cause_vs_symptom": reasoning_proposal.root_cause_vs_symptom,
+            "proposed_action_type": reasoning_proposal.proposed_action_type,
+            "instructions": reasoning_proposal.instructions,
+            "confidence": reasoning_proposal.confidence,
+            "retrieved_context_used": reasoning_proposal.retrieved_context_used,
+        },
+        "safety": {
+            "verdict": safety_verdict.verdict,
+            "reason": safety_verdict.reason,
+            "safe_alternative_instructions": safety_verdict.safe_alternative_instructions,
+            "checked_rules": safety_verdict.checked_rules,
+        },
+        "persisted": True,
+        "stored_entry_added_at": stored_entry["added_to_store_at"],
+    }
+
+    # Build a recommendation-shaped view for the existing UI rendering path
+    # (renderResult() in app.js expects recommendation.proposed_action) —
+    # only populated when the Safety Agent actually approved, since a
+    # vetoed proposal should never present as an actionable recommendation.
+    if safety_verdict.verdict == "approved":
+        action = {
+            "type": reasoning_proposal.proposed_action_type,
+            "product_category": reasoning_proposal.proposed_product_category,
+            "instructions": reasoning_proposal.instructions,
+        }
+        if reasoning_proposal.proposed_product_category and \
+           reasoning_proposal.proposed_product_category != "unknown":
+            try:
+                action["product_lookup"] = find_product_via_mcp(
+                    product_category=reasoning_proposal.proposed_product_category
+                )
+            except Exception as e:
+                action["product_lookup_error"] = str(e)
+        result["recommendation"] = {
+            "diagnosis": reasoning_proposal.diagnosis,
+            "root_cause_vs_symptom": reasoning_proposal.root_cause_vs_symptom,
+            "proposed_action": action,
+            "confidence": reasoning_proposal.confidence,
+            "retrieved_context_used": reasoning_proposal.retrieved_context_used,
+        }
+    else:
+        result["recommendation"] = {
+            "diagnosis": f"⛔ SAFETY AGENT VETO: {safety_verdict.reason}",
+            "root_cause_vs_symptom": None,
+            "proposed_action": {
+                "type": "wait_and_retest",
+                "instructions": safety_verdict.safe_alternative_instructions,
+            },
+            "confidence": 1.0,
+            "retrieved_context_used": [],
+        }
+
+    result["history_length_used"] = len(build_merged_state().readings)
+
+    return jsonify(result)
+
+
+@app.route("/api/trend")
+def get_trend():
+    """
+    Returns the FULL merged history (fixed case-study readings + everything
+    persisted from live uploads) for the trend chart/table. This is what
+    makes new uploads visibly change the trend view rather than
+    disappearing into a response that's shown once and forgotten.
+    """
+    state = build_merged_state()
+    added = get_all_added_readings()
+    added_timestamps = {entry["read_at"] for entry in added}
+
+    readings = []
+    for r in state.readings:
+        readings.append({
+            "read_at": r.read_at.isoformat(),
+            "source": r.source,
+            "is_new": r.read_at.isoformat() in added_timestamps,
+            "free_chlorine_ppm": r.free_chlorine_ppm,
+            "total_chlorine_ppm": r.total_chlorine_ppm,
+            "ph": r.ph,
+            "total_alkalinity_ppm": r.total_alkalinity_ppm,
+            "calcium_hardness_ppm": r.calcium_hardness_ppm,
+            "cyanuric_acid_ppm": r.cyanuric_acid_ppm,
+            "copper_ppm": r.copper_ppm,
+            "phosphates_ppb": r.phosphates_ppb,
+            "salt_ppm": r.salt_ppm,
+        })
+
+    # attach diagnosis/verdict metadata for the newly-added ones, so the
+    # table can show what the system concluded about each upload
+    added_meta = {e["read_at"]: e for e in added}
+    for r in readings:
+        if r["is_new"] and r["read_at"] in added_meta:
+            r["diagnosis"] = added_meta[r["read_at"]].get("diagnosis", "")
+            r["safety_verdict"] = added_meta[r["read_at"]].get("safety_verdict", "")
+
+    return jsonify({"readings": readings, "ideal_ranges": IDEAL_RANGES,
+                     "fixed_count": len(state.readings) - len(added),
+                     "added_count": len(added)})
+
+
+@app.route("/api/trend/reset", methods=["POST"])
+def reset_trend():
+    """Clears everything persisted from live uploads, back to just the
+    original 7-reading case-study dataset. Used by the UI's 'Reset demo
+    data' button so repeated rehearsals don't pollute the trend view."""
+    clear_store()
+    return jsonify({"reset": True})
 
 
 @app.route("/api/analyze_demo", methods=["POST"])

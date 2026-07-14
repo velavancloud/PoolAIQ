@@ -57,6 +57,15 @@ demoing somewhere without reliable wifi/API access.
   anymore) proposes a chemical addition, and the Safety Agent —
   independently, with zero LLM calls — blocks it. See `../README.md`
   Section 3c.
+- **Persistence**: `/api/analyze` (the real photo-upload path) now runs
+  the FULL three-agent pipeline against `merged_state.py`'s combined
+  history (fixed case study + everything persisted via
+  `reading_store.py`), and persists the result — approved OR vetoed —
+  so it's included in every SUBSEQUENT analysis and in Section 04's
+  trend chart/table. Verified: a synthetic elevated-pH-and-alkalinity
+  reading, persisted through this pipeline, correctly triggered the same
+  root-cause pattern detector described in Section 3c's veto scenario.
+  See `../README.md` Section 3d.
 
 ## What's simplified for the demo (be upfront about this to the panel)
 
@@ -115,6 +124,18 @@ demoing somewhere without reliable wifi/API access.
    a test strip (even a random one, or reuse a photo from
    `../docs/timeline-photos/`), upload it live. Narrate the extraction JSON
    as it streams back, then the recommendation.
+
+   **After it completes, scroll to Section 04 — "Trend over time."** Point
+   out the new point on the chart (rendered larger, in coral, distinct
+   from the original readings) and the new row in the table below,
+   flagged with an amber "NEW" badge. Say explicitly: *"This isn't a
+   separate log of what you just uploaded — it's now part of this pool's
+   permanent history. If you upload another photo right now, THAT
+   analysis will reason over this one too."* Click through the metric
+   tabs (pH / Free Cl / Alkalinity / CYA) to show the chart updates for
+   each. If you want a clean chart for a screenshot or a second run-through,
+   click "Reset demo data" — it only clears what's been uploaded, never
+   touches the original 7-reading case study.
 
 7. **If asked "is that MCP call actually real or just an API route":** open
    a terminal and run `python3 ../mcp_server/test_mcp_client.py` live. This
