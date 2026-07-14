@@ -6,6 +6,20 @@
 
 ---
 
+## 0. Live Demo
+
+A working web UI is included — upload a test-strip photo (or replay a real
+moment from the case study) and watch PoolAIQ reason over this pool's full
+history live. See `webapp/README.md` for setup (2 minutes) and a suggested
+demo script for a panel presentation.
+
+```bash
+cd webapp && pip install -r requirements.txt
+export ANTHROPIC_API_KEY=your_key_here
+python3 app.py
+# open http://localhost:5000
+```
+
 ## 1. The Problem
 
 Pool chemistry is a **coupled system**, not a checklist:

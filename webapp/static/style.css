@@ -1,0 +1,525 @@
+/* ============================================================
+   PoolAIQ — design tokens
+   Color: drawn from actual test-strip reagent pads
+   Type: JetBrains Mono for readings/data, Inter for prose
+   Signature: the strip-visual pad row that fills in as data streams in
+   ============================================================ */
+
+:root {
+  --pool-deep: #123638;
+  --pool-mid: #1B4B4F;
+  --pool-surface: #2C7A7B;
+  --amber: #C08A2E;
+  --amber-soft: #E4C888;
+  --coral: #D65A45;
+  --sage: #7A9B76;
+  --paper: #F7F5F0;
+  --paper-dim: #EDEAE2;
+  --ink: #16221F;
+  --ink-soft: #5B6B66;
+  --line: #D9D4C6;
+
+  --font-display: 'JetBrains Mono', monospace;
+  --font-body: 'Inter', sans-serif;
+
+  --radius: 3px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ---------- Topbar ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 32px;
+  border-bottom: 2px solid var(--pool-deep);
+  background: var(--paper);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-mark {
+  display: flex;
+  gap: 3px;
+  width: 30px;
+}
+
+.brand-mark .pad {
+  width: 8px;
+  height: 26px;
+  border-radius: 1px;
+}
+.pad-1 { background: var(--pool-surface); }
+.pad-2 { background: var(--amber); }
+.pad-3 { background: var(--coral); }
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--pool-deep);
+}
+
+.brand-tag {
+  font-size: 11px;
+  color: var(--ink-soft);
+  letter-spacing: 0.02em;
+}
+
+.topbar-meta {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.eyebrow {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--amber);
+  font-weight: 600;
+}
+
+.pool-id {
+  font-family: var(--font-display);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+/* ---------- Layout ---------- */
+
+.layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 380px 1fr;
+  gap: 0;
+}
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+}
+
+.strip-panel, .reasoning-panel {
+  padding: 32px;
+}
+
+.strip-panel {
+  border-right: 1px solid var(--line);
+  background: var(--paper-dim);
+}
+
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--pool-deep);
+  margin: 0 0 6px 0;
+  text-transform: uppercase;
+}
+
+.panel-sub {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+/* ---------- Upload zone ---------- */
+
+.upload-zone {
+  position: relative;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  background: var(--paper);
+  overflow: hidden;
+}
+
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--pool-surface);
+  background: #EFF6F5;
+}
+
+.upload-zone:focus-visible {
+  outline: 2px solid var(--pool-surface);
+  outline-offset: 2px;
+}
+
+.upload-inner {
+  text-align: center;
+  padding: 20px;
+}
+
+.upload-icon {
+  font-size: 22px;
+  color: var(--pool-surface);
+  margin-bottom: 8px;
+  font-family: var(--font-display);
+}
+
+.upload-text {
+  font-size: 13px;
+  color: var(--ink-soft);
+  line-height: 1.5;
+}
+
+.upload-text span {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--amber);
+}
+
+.preview-img {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  padding: 11px 18px;
+  border-radius: var(--radius);
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  width: 100%;
+  margin-top: 14px;
+}
+
+.btn:active { transform: scale(0.98); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--pool-deep);
+  color: var(--paper);
+}
+.btn-primary:hover:not(:disabled) { background: var(--pool-mid); }
+
+.btn-approve {
+  background: var(--sage);
+  color: white;
+  width: auto;
+  flex: 1;
+}
+
+.btn-reject {
+  background: transparent;
+  color: var(--ink-soft);
+  border: 1px solid var(--line);
+  width: auto;
+  flex: 1;
+}
+
+.approval-buttons {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+/* ---------- Divider ---------- */
+
+.divider {
+  display: flex;
+  align-items: center;
+  margin: 24px 0 16px 0;
+  color: var(--ink-soft);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.divider::before, .divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+.divider span { padding: 0 10px; white-space: nowrap; }
+
+/* ---------- Scenario replay buttons ---------- */
+
+.scenario-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scenario-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.scenario-btn:hover {
+  border-color: var(--amber);
+  background: #FBF6EA;
+}
+
+.scenario-btn.active {
+  border-color: var(--pool-deep);
+  background: var(--pool-deep);
+}
+.scenario-btn.active .scenario-date,
+.scenario-btn.active .scenario-label {
+  color: var(--paper);
+}
+
+.scenario-date {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--amber);
+  min-width: 46px;
+}
+
+.scenario-label {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.3;
+}
+
+/* ---------- Strip visual (signature element) ---------- */
+
+.strip-visual {
+  margin-top: 28px;
+  padding: 26px 18px 18px 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  min-height: 100px;
+}
+
+.strip-empty {
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+  text-align: center;
+  padding: 20px 0;
+}
+
+.pad-row {
+  display: flex;
+  gap: 5px;
+  height: 76px;
+}
+
+.pad-cell {
+  flex: 1;
+  border-radius: 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 4px;
+  opacity: 0;
+  transform: translateY(6px);
+  animation: padIn 0.4s ease forwards;
+  position: relative;
+}
+
+@keyframes padIn {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pad-cell .pad-value {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.35);
+}
+
+.pad-cell .pad-label {
+  position: absolute;
+  top: -18px;
+  font-size: 8px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* status-based pad coloring applied via inline style + data-status */
+.pad-cell[data-status="low"] { background: var(--coral); }
+.pad-cell[data-status="high"] { background: var(--amber); }
+.pad-cell[data-status="ok"] { background: var(--sage); }
+.pad-cell[data-status="unknown"] { background: var(--line); }
+
+/* ---------- Reasoning panel ---------- */
+
+.reasoning-empty {
+  color: var(--ink-soft);
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 480px;
+  padding: 40px 0;
+}
+
+.context-line {
+  font-family: var(--font-display);
+  font-size: 11px;
+  color: var(--pool-surface);
+  background: #EFF6F5;
+  border-left: 3px solid var(--pool-surface);
+  padding: 8px 12px;
+  margin-bottom: 20px;
+  border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+.block-label {
+  font-family: var(--font-display);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  margin-bottom: 8px;
+  font-weight: 700;
+}
+
+.diagnosis-block, .action-block, .approval-block {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  margin-bottom: 16px;
+}
+
+.diagnosis-text {
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0;
+  color: var(--ink);
+}
+
+.root-cause-flag {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: #FBF0EC;
+  border-left: 3px solid var(--coral);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  font-size: 12.5px;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.action-type {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--pool-deep);
+  color: var(--paper);
+  padding: 4px 10px;
+  border-radius: 2px;
+  margin-bottom: 10px;
+}
+
+.action-instructions {
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+  color: var(--ink);
+}
+
+.approval-copy {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 0 0 4px 0;
+  line-height: 1.5;
+}
+
+.approval-confirm {
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+}
+.approval-confirm.approved { background: #EEF5EC; color: var(--sage); }
+.approval-confirm.rejected { background: #FBF0EC; color: var(--coral); }
+
+.confidence-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.confidence-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--paper-dim);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  background: var(--pool-surface);
+  width: 0%;
+  transition: width 0.5s ease;
+}
+
+/* ---------- Footer ---------- */
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.foot a {
+  color: var(--pool-surface);
+  text-decoration: none;
+}
+.foot a:hover { text-decoration: underline; }

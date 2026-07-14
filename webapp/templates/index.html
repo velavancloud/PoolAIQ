@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PoolAIQ — Diagnostic Demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <div class="pad pad-1"></div>
+        <div class="pad pad-2"></div>
+        <div class="pad pad-3"></div>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">PoolAIQ</span>
+        <span class="brand-tag">history-grounded pool diagnostics</span>
+      </div>
+    </div>
+    <div class="topbar-meta">
+      <span class="eyebrow">Capstone Demo</span>
+      <span class="pool-id">Pool #A12C — 18,000 gal · salt · pebble</span>
+    </div>
+  </header>
+
+  <main class="layout">
+
+    <!-- LEFT: the strip -->
+    <section class="strip-panel" aria-label="Test strip input and history">
+      <h2 class="panel-title">01 — Read the water</h2>
+      <p class="panel-sub">Upload a test strip photo, or replay a moment from the real case-study timeline.</p>
+
+      <div class="upload-zone" id="uploadZone">
+        <input type="file" id="photoInput" accept="image/*" hidden>
+        <div class="upload-inner" id="uploadInner">
+          <div class="upload-icon">↑</div>
+          <div class="upload-text">Drop a test strip photo<br><span>or click to browse</span></div>
+        </div>
+        <img id="previewImg" class="preview-img" hidden>
+      </div>
+
+      <button class="btn btn-primary" id="analyzeBtn" disabled>Analyze photo</button>
+
+      <div class="divider"><span>or replay case study</span></div>
+
+      <div class="scenario-list">
+        <button class="scenario-btn" data-scenario="early_no_pattern">
+          <span class="scenario-date">Jun 29</span>
+          <span class="scenario-label">pH overcorrected — early signal</span>
+        </button>
+        <button class="scenario-btn" data-scenario="root_cause_detected">
+          <span class="scenario-date">Jul 03</span>
+          <span class="scenario-label">pH recurs — root cause fires</span>
+        </button>
+        <button class="scenario-btn" data-scenario="stabilized">
+          <span class="scenario-date">Jul 11</span>
+          <span class="scenario-label">Stabilized — 70% score</span>
+        </button>
+      </div>
+
+      <div class="strip-visual" id="stripVisual" aria-label="Extracted reading, rendered as color pads">
+        <div class="strip-empty" id="stripEmpty">Readings will render here as color pads once analyzed.</div>
+        <div class="pad-row" id="padRow" hidden></div>
+      </div>
+    </section>
+
+    <!-- RIGHT: reasoning output -->
+    <section class="reasoning-panel" aria-label="Diagnosis and recommendation">
+      <h2 class="panel-title">02 — What the history says</h2>
+
+      <div id="reasoningEmpty" class="reasoning-empty">
+        <p>Run an analysis on the left to see PoolAIQ reason over this pool's full history —
+        not just the reading you just took.</p>
+      </div>
+
+      <div id="reasoningResult" hidden>
+
+        <div class="context-line" id="contextLine"></div>
+
+        <div class="diagnosis-block">
+          <div class="block-label">Diagnosis</div>
+          <p class="diagnosis-text" id="diagnosisText"></p>
+          <div class="root-cause-flag" id="rootCauseFlag" hidden></div>
+        </div>
+
+        <div class="action-block" id="actionBlock">
+          <div class="block-label">Proposed action</div>
+          <div class="action-type" id="actionType"></div>
+          <p class="action-instructions" id="actionInstructions"></p>
+        </div>
+
+        <div class="approval-block">
+          <div class="block-label">Human-in-the-loop</div>
+          <p class="approval-copy">This recommendation requires your approval before any task is created or notification sent.</p>
+          <div class="approval-buttons">
+            <button class="btn btn-approve" id="approveBtn">Approve &amp; create task</button>
+            <button class="btn btn-reject" id="rejectBtn">Reject</button>
+          </div>
+          <div class="approval-confirm" id="approvalConfirm" hidden></div>
+        </div>
+
+        <div class="confidence-row">
+          <span>Confidence</span>
+          <div class="confidence-bar"><div class="confidence-fill" id="confidenceFill"></div></div>
+          <span id="confidenceValue"></span>
+        </div>
+
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="foot">
+    <span>PoolAIQ — grounded in a real 2-month recovery timeline</span>
+    <a href="https://github.com/velavancloud/PoolAIQ" target="_blank" rel="noopener">github.com/velavancloud/PoolAIQ</a>
+  </footer>
+
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

@@ -15,3 +15,7 @@ Thumbs.db
 .idea/
 
 # Large media (optional - see note in README about Git LFS)
+
+# Flask
+instance/
+*.log
