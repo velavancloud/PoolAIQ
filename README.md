@@ -280,10 +280,33 @@ effect.
   cost per request — this demo optimizes for "obviously correct and easy
   to verify" over "fast," which is the right tradeoff for a capstone
   artifact but not for production load.
-- **No auth on the MCP server.** Anyone who can spawn the subprocess can
-  call any tool. Fine for a local demo; a real deployment would need the
-  MCP SDK's auth support (visible in the SDK's `mcp.server.auth` module,
-  not used here).
+- **Auth was initially absent, now added for the HTTP transport.** The
+  original version of this section said "no auth on the MCP server" — true
+  at the time, for stdio. That's since been closed:
+  `POOLAIQ_MCP_TRANSPORT=streamable-http` mode requires
+  `POOLAIQ_MCP_SERVER_API_KEY` and refuses to start without it, enforced
+  by a bearer-token middleware wrapping FastMCP's HTTP app (not the SDK's
+  full OAuth `AuthSettings` — deliberately scoped down, since that path
+  requires standing up a real OAuth authorization server with an
+  `issuer_url`, more machinery than this project needs; a real bearer-key
+  check was the correctly-scoped choice, stated as such rather than
+  silently under-building). Stdio transport still has no auth —
+  appropriate, since stdio's security boundary is "can this process spawn
+  a subprocess on this machine," not a network concern.
+- **Deployment.** See `mcp_server/deploy/README.md` — the server can now
+  run as a real network-addressable HTTP service, with a working EC2
+  Terraform template (`mcp_server/deploy/ec2/`) as the reference
+  deployment. Azure and GCP are explicitly not built yet; that README
+  states what carries over unchanged (the Dockerfile, `config.py`'s
+  environment-variable surface) versus what needs building fresh per
+  cloud.
+- **Server-side inference.** A new `reason_about_reading` tool lets the
+  MCP server itself make a Claude call using its own configured
+  `ANTHROPIC_API_KEY` — distinct from the webapp's separate key used for
+  vision extraction. Deliberately narrow-scoped (plain-language
+  explanation only, no dosing authority) rather than a general-purpose
+  inference proxy, consistent with the "narrow tool boundaries" principle
+  this section already argues for.
 
 ## 3c. Multi-Agent — Genuine Separation of Authority, Not Renamed Functions
 
@@ -469,7 +492,7 @@ one in its history.
 - `prompts/reasoning_prompt.md` — the recommendation engine system prompt
 - `api/task_schema.json` — task/notification object shape
 - `prototype/` — working, tested Python reasoning engine + RAG layer, replayed against the real timeline data (see `prototype/README.md`)
-- `mcp_server/` — real MCP server (product lookup + notification dispatch tools) with a protocol-level client test (see Section 3b)
+- `mcp_server/` — real MCP server (5 tools including server-side inference) supporting BOTH stdio (local) and HTTP (deployed) transport, with bearer-token auth for HTTP, a real Docker image, and a working EC2 Terraform deployment template (see Section 3b and `mcp_server/deploy/README.md`)
 - `agents/` — three-agent system (Extraction/Reasoning/Safety) with a real, independently-enforced veto boundary — includes a runnable proof (`orchestrator.py`) that the Safety Agent catches what the Reasoning Agent cannot see (see Section 3c)
 - `webapp/reading_store.py`, `webapp/merged_state.py` — persistence layer so live-uploaded readings actually accumulate into history and affect subsequent reasoning, not just get displayed once and discarded (see Section 3d)
 
