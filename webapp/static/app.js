@@ -172,6 +172,37 @@ function renderStrip(reading) {
   });
 }
 
+const retrievalBlock = document.getElementById('retrievalBlock');
+const citationList = document.getElementById('citationList');
+
+function renderCitations(citations) {
+  if (!citations || citations.length === 0) {
+    retrievalBlock.hidden = true;
+    return;
+  }
+  retrievalBlock.hidden = false;
+  citationList.innerHTML = '';
+
+  citations.forEach(raw => {
+    // format: "KB[id] (score=0.24): text..." or "HISTORY[date] (score=0.11): text..."
+    const isKB = raw.startsWith('KB[');
+    const match = raw.match(/^(KB|HISTORY)\[(.+?)\]\s*\(score=([\d.]+)\):\s*(.+)$/);
+    const item = document.createElement('div');
+    item.className = 'citation-item';
+
+    if (match) {
+      const [, source, ref, score, text] = match;
+      item.innerHTML = `
+        <span class="citation-source ${isKB ? 'kb' : 'history'}">${isKB ? 'knowledge base' : 'this pool'}</span>
+        <span class="citation-text">${text}<span class="citation-score">match ${Math.round(parseFloat(score) * 100)}%</span></span>
+      `;
+    } else {
+      item.innerHTML = `<span class="citation-text">${raw}</span>`;
+    }
+    citationList.appendChild(item);
+  });
+}
+
 function renderResult(data) {
   reasoningEmpty.hidden = true;
   reasoningResult.hidden = false;
@@ -179,6 +210,7 @@ function renderResult(data) {
   approvalConfirm.className = 'approval-confirm';
 
   renderStrip(data.new_reading);
+  renderCitations(data.recommendation.retrieved_context_used);
 
   contextLine.textContent =
     `Reasoned over ${data.history_length_used} historical readings for this pool ` +

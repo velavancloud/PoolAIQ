@@ -13,6 +13,29 @@ moment from the case study) and watch PoolAIQ reason over this pool's full
 history live. See `webapp/README.md` for setup (2 minutes) and a suggested
 demo script for a panel presentation.
 
+### Build status (honest, as of this commit)
+
+The architecture diagram in Section 3 describes the target system. Not all of
+it is built. Here is what's real vs. designed-but-not-built:
+
+| Component | Status | Detail |
+|---|---|---|
+| Vision extraction | **Built** | Live Claude API call in `webapp/app.py`, using `prompts/extraction_prompt.md` verbatim |
+| Pool state store | **Built (in-memory)** | `prototype/case_study_data.py` — a hardcoded Python object standing in for the `schema/pool_state.sql` database. No persistence between requests. |
+| Reasoning / recommendation engine | **Built** | `prototype/reasoning_engine.py` — deterministic rules + trend detection, tested against real case-study data |
+| RAG retrieval layer | **Built** | Real TF-IDF + cosine-similarity retrieval over two corpora (general chemistry KB + this pool's history), built fresh per-request in `prototype/rag/`, surfaced in the UI with source attribution. See Section 3a for the honest tradeoffs (in-memory index, lexical not semantic matching, small seed KB). |
+| Human-in-the-loop approval | **Built (UI only)** | Approve/Reject buttons work and gate the demo flow, but don't write to a real task queue |
+| Task/notification engine | **Not built** | `api/task_schema.json` documents the intended shape; no SMS/push code exists |
+| Commerce hook | **Not built** | Documented in Section 3 only |
+| MCP (tool-use protocol) | **Not built, not previously claimed** | No MCP server exists in this project |
+| Multi-agent orchestration | **Not built, not previously claimed** | This is a single Flask app calling two Python functions sequentially — one LLM call (extraction) and one deterministic function (reasoning). Not a multi-agent system. |
+
+**Why this table exists:** an earlier draft of this README described the
+target architecture in a way that could be misread as describing what was
+already running. It wasn't. This project is honest about that gap because
+the whole thesis is about a system that doesn't overclaim to a pool owner —
+it should hold itself to the same standard.
+
 ```bash
 cd webapp && pip install -r requirements.txt
 export ANTHROPIC_API_KEY=your_key_here
@@ -118,6 +141,77 @@ Every water test strip photo + every retail printout is a **timestamped state sn
 │                                │   - lighter-touch, fewer interventions
 └─────────────────────────────┘
 ```
+
+## 3a. What "Real RAG" Requires Here (and what changed)
+
+The original diagram labeled the retrieval step "RAG Retrieval Layer" but the
+prototype just read a Python list — that's not retrieval, that's just...
+having the list. Real RAG needs three things that weren't there:
+
+1. **A corpus that's actually too big to pass in full context.** This pool's
+   history (7 readings) fits trivially in a prompt — no retrieval is needed
+   to reason over 7 rows. RAG only earns its keep once you're reasoning over
+   *many pools* or a large general chemistry knowledge base (manufacturer
+   dosing tables, safety interaction rules, forum-scraped troubleshooting
+   patterns) where you can't just paste everything in.
+2. **An embedding + similarity search step**, so a new reading retrieves the
+   *most relevant* prior readings/KB chunks — not just "all of them."
+3. **A retrieval step that's inspectable** — for the safety-critical parts of
+   this system, being able to show *which specific prior reading or KB
+   passage* justified a recommendation is not optional. This is implemented
+   in `prototype/rag/` (see below) as `retrieved_context` returned alongside
+   every recommendation.
+
+### What's now built (`prototype/rag/`)
+
+- `knowledge_base.py` — a small seed corpus of general pool chemistry facts
+  (chunked, one fact per entry) distinct from this pool's own history
+- `embed_store.py` — embeds the KB + this pool's readings using a local
+  sentence-transformer model (no external API dependency for the retrieval
+  step itself — keeps the demo runnable offline), stores vectors in a
+  simple in-memory index (documented as a stand-in for a real vector DB —
+  see limitations below)
+- `retriever.py` — given a new reading, retrieves the top-k most relevant
+  prior readings AND the top-k most relevant KB chunks, returns both with
+  similarity scores
+- `reasoning_engine.py` now accepts `retrieved_context` and threads it into
+  the diagnosis output as `retrieved_context_used` (matching the
+  `prompts/reasoning_prompt.md` output schema, which already specified this
+  field but nothing was populating it)
+
+### Known limitations of this RAG implementation (stated up front)
+
+- In-memory vector index, not a real vector DB (Pinecone/Weaviate/pgvector) —
+  fine for one pool's demo corpus, would not scale past a handful of pools
+- KB seed corpus is small (~15 entries) and hand-written, not scraped/curated
+  at scale — sufficient to demonstrate the retrieval mechanism, not a
+  production knowledge base
+- No re-ranking step — pure cosine similarity, which is known to
+  under-perform on domain-specific technical text vs. a fine-tuned or
+  hybrid (BM25 + embedding) retriever
+- **TF-IDF ranking is imperfect on adjacent chemistry topics.** Verified
+  during testing: for the pH+alkalinity query, the correct KB entry
+  (`kb_alk_ph_coupling`) sometimes ranks #2 instead of #1, because
+  `kb_calcium_hardness_scale` shares enough incidental term overlap
+  ("scale", "ppm", chemistry vocabulary) to score competitively. This is
+  the exact lexical-vs-semantic gap a neural embedding model would close.
+  **Current mitigation:** the rule-based detectors in `reasoning_engine.py`
+  (e.g. `check_alkalinity_ph_coupling`) fire independently of retrieval
+  ranking — when a rule fires, the code does a *targeted* lookup for its
+  specific supporting KB entry by ID, rather than trusting top-k rank
+  alone. This means retrieval quality currently matters more for the
+  general "what's relevant" citations than for the safety-critical
+  pattern-detection logic itself, which stays deterministic. Worth stating
+  plainly: this is a reasonable interim design, not a fully-solved
+  retrieval problem.
+- **Verified second example of the same gap:** a query for "free chlorine is
+  high" does not retrieve `kb_breakpoint_chlorination` in top-3, even though
+  it's conceptually the most relevant entry, because that KB text is written
+  around "combined chlorine" terminology rather than "free chlorine" — the
+  two concepts are chemically related but lexically distant. This is the
+  clearest concrete case for why a semantic embedding model (once network
+  constraints allow deploying one) would materially improve retrieval
+  quality here, beyond what better keyword engineering could fix.
 
 ## 4. Core Design Principles
 

@@ -10,9 +10,15 @@ Run: python3 reasoning_engine.py
 (Runs against the bundled case_study_data.py, replaying the real timeline.)
 """
 
+import os
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Optional
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "rag"))
+from embed_store import RetrievalIndex  # noqa: E402
+from knowledge_base import get_all_entries  # noqa: E402
 
 
 IDEAL_RANGES = {
@@ -82,6 +88,50 @@ class PoolState:
             if elapsed < a.requires_wait_hours:
                 return a
         return None
+
+
+def build_retrieval_index(state: PoolState) -> RetrievalIndex:
+    """
+    Builds a RetrievalIndex over BOTH corpora for this state: the general
+    knowledge base (chemistry facts) and this pool's own reading history.
+    Rebuilt per-call rather than cached across requests — the demo's
+    history is small enough (single digits to low tens of readings) that
+    this costs milliseconds; a production system would cache/incrementally
+    update the index instead of rebuilding on every recommendation.
+    """
+    index = RetrievalIndex()
+    index.index_knowledge_base(get_all_entries())
+    index.index_pool_history(state.readings)
+    index.build()
+    return index
+
+
+def build_query_from_state(state: PoolState) -> str:
+    """
+    Turns the pool's current situation into a natural-language query for
+    retrieval — this is the actual "what do we search for" step that was
+    missing before. The query is built from which metrics are CURRENTLY
+    out of range, so retrieval is grounded in the live situation, not a
+    generic "pool chemistry" query that would return the same top results
+    every time regardless of what's actually happening.
+    """
+    latest = state.latest_reading()
+    if latest is None:
+        return "pool chemistry general maintenance"
+
+    out_of_range_terms = []
+    for field_name in IDEAL_RANGES:
+        val = getattr(latest, field_name, None)
+        status = out_of_range(field_name, val)
+        if status:
+            readable = field_name.replace("_ppm", "").replace("_ppb", "").replace("_", " ")
+            out_of_range_terms.append(f"{readable} is {status}")
+
+    if not out_of_range_terms:
+        return "pool chemistry stable maintenance"
+
+    return "Pool water issue: " + ", ".join(out_of_range_terms) + \
+        (". Salt system with waterfall aeration." if state.profile.has_waterfall_or_aeration else "")
 
 
 def out_of_range(field_name: str, value: float) -> Optional[str]:
@@ -163,14 +213,45 @@ def check_alkalinity_ph_coupling(state: PoolState) -> Optional[str]:
     return None
 
 
-def recommend(state: PoolState, as_of: datetime) -> dict:
-    """Main entry point. Returns a recommendation dict matching the reasoning_prompt.md output shape."""
+def _format_citations(retrieved: dict) -> list:
+    """Flattens retrieval results into the retrieved_context_used list format
+    specified in prompts/reasoning_prompt.md's output schema."""
+    citations = []
+    for item in retrieved.get("knowledge_base", []):
+        citations.append(f"KB[{item.id}] (score={item.score:.2f}): {item.text[:90]}...")
+    for item in retrieved.get("pool_history", []):
+        citations.append(f"HISTORY[{item.metadata['read_at']}] (score={item.score:.2f}): {item.text[:90]}...")
+    return citations
+
+
+def recommend(state: PoolState, as_of: datetime, use_rag: bool = True) -> dict:
+    """
+    Main entry point. Returns a recommendation dict matching the
+    reasoning_prompt.md output shape.
+
+    use_rag=True (default): builds a retrieval index over this pool's
+    history + the general knowledge base, retrieves the most relevant
+    entries for the CURRENT situation, and attaches them as
+    retrieved_context_used on every branch of the output — this is what
+    makes the "RAG Retrieval Layer" in README.md Section 3 real rather
+    than aspirational. Set False to skip retrieval (e.g. for fast unit
+    tests of the rule logic alone).
+    """
 
     latest = state.latest_reading()
     if latest is None:
-        return {"proposed_action": {"type": "no_action"}, "diagnosis": "No readings yet."}
+        return {"proposed_action": {"type": "no_action"}, "diagnosis": "No readings yet.",
+                "retrieved_context_used": []}
 
-    # --- HARD SAFETY RULES FIRST (non-negotiable, independent of any pattern detection) ---
+    retrieved = {"knowledge_base": [], "pool_history": []}
+    citations = []
+    if use_rag:
+        index = build_retrieval_index(state)
+        query = build_query_from_state(state)
+        retrieved = index.retrieve(query, k_kb=3, k_history=3)
+        citations = _format_citations(retrieved)
+
+    # --- HARD SAFETY RULES FIRST (non-negotiable, independent of any pattern detection or retrieval) ---
     active_wait = state.active_wait_window(as_of)
     if active_wait:
         remaining = active_wait.requires_wait_hours - (as_of - active_wait.added_at).total_seconds() / 3600
@@ -187,13 +268,21 @@ def recommend(state: PoolState, as_of: datetime) -> dict:
             "confidence": 1.0,
             "requires_human_approval": True,
             "safety_gate_triggered": True,
+            "retrieved_context_used": citations,
         }
 
     # --- ROOT CAUSE / TREND DETECTION (the actual thesis of this project) ---
     alk_ph_pattern = check_alkalinity_ph_coupling(state)
     if alk_ph_pattern:
+        # Pull the specific KB entry on this pattern, if retrieval surfaced it,
+        # to cite domain rationale alongside the pool's own data pattern.
+        kb_support = next((c for c in retrieved.get("knowledge_base", [])
+                            if c.id == "kb_alk_ph_coupling"), None)
+        diagnosis = alk_ph_pattern
+        if kb_support:
+            diagnosis += f" (Supported by general chemistry reference: {kb_support.text})"
         return {
-            "diagnosis": alk_ph_pattern,
+            "diagnosis": diagnosis,
             "root_cause_vs_symptom": "root_cause",
             "proposed_action": {
                 "type": "equipment_or_technique_change",
@@ -203,6 +292,7 @@ def recommend(state: PoolState, as_of: datetime) -> dict:
             },
             "confidence": 0.85,
             "requires_human_approval": True,
+            "retrieved_context_used": citations,
         }
 
     for field_name in ("free_chlorine_ppm", "ph", "total_alkalinity_ppm", "cyanuric_acid_ppm"):
@@ -222,6 +312,7 @@ def recommend(state: PoolState, as_of: datetime) -> dict:
                 },
                 "confidence": 0.7,
                 "requires_human_approval": True,
+                "retrieved_context_used": citations,
             }
 
     # --- STANDARD SINGLE-METRIC CHECK (fallback, same as any retail advisor would do) ---
@@ -242,6 +333,7 @@ def recommend(state: PoolState, as_of: datetime) -> dict:
                 },
                 "confidence": 0.6,
                 "requires_human_approval": True,
+                "retrieved_context_used": citations,
             }
 
     return {
@@ -250,6 +342,7 @@ def recommend(state: PoolState, as_of: datetime) -> dict:
         "proposed_action": {"type": "no_action", "instructions": "Continue weekly maintenance cadence."},
         "confidence": 0.95,
         "requires_human_approval": False,
+        "retrieved_context_used": citations,
     }
 
 

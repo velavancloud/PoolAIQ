@@ -507,6 +507,74 @@ body {
   transition: width 0.5s ease;
 }
 
+/* ---------- Retrieval / RAG citations ---------- */
+
+.retrieval-block {
+  margin-top: 18px;
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.retrieval-copy {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+}
+
+.citation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.citation-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  background: var(--paper-dim);
+  border-radius: var(--radius);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.citation-source {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 7px;
+  border-radius: 2px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.citation-source.kb {
+  background: var(--pool-surface);
+  color: white;
+}
+
+.citation-source.history {
+  background: var(--amber);
+  color: white;
+}
+
+.citation-text {
+  color: var(--ink);
+}
+
+.citation-score {
+  font-family: var(--font-display);
+  font-size: 10px;
+  color: var(--ink-soft);
+  margin-left: 6px;
+}
+
 /* ---------- Footer ---------- */
 
 .foot {

@@ -29,6 +29,14 @@ demoing somewhere without reliable wifi/API access.
 - **Reasoning engine**: `/api/analyze` and `/api/analyze_demo` both call
   `../prototype/reasoning_engine.py`'s `recommend()` function directly — the
   same tested code from the prototype, not reimplemented for the demo.
+- **RAG retrieval**: every recommendation is grounded in a real TF-IDF +
+  cosine-similarity retrieval step over two corpora — a general pool
+  chemistry knowledge base (`../prototype/rag/knowledge_base.py`) and this
+  pool's own reading history — built and queried fresh on every request via
+  `../prototype/rag/embed_store.py`. Retrieved passages are shown in the UI
+  with source attribution and match scores, not just returned as an unused
+  API field. See `../prototype/rag/README.md` for the retrieval design and
+  documented lexical-vs-semantic tradeoffs.
 - **Historical grounding**: Every analysis loads `build_case_study_state()`
   from `../prototype/case_study_data.py` — the real anonymized readings from
   the actual 2-month timeline — and reasons over the FULL history, not just
@@ -64,6 +72,14 @@ demoing somewhere without reliable wifi/API access.
    high."* Explain: **this exact reading, at a real Leslie's visit, produced
    a treatment plan that only addressed pH — not alkalinity.** The system
    catches what the single-visit advisor structurally couldn't.
+
+   **Scroll to the "Retrieved context (RAG)" panel below the recommendation.**
+   This is the actual retrieval step, not decoration — point out the two
+   source types (blue "knowledge base" tags vs. amber "this pool" tags) and
+   the match percentages. Say explicitly: *"This diagnosis didn't just come
+   from a rule firing — it's grounded in a retrieved passage from a general
+   chemistry knowledge base AND retrieved prior readings from this specific
+   pool. You can inspect exactly what informed this recommendation."*
 
 4. **Click "Jul 11 — stabilized."** Show the system doesn't just keep firing
    the same pattern forever — it recognizes resolution and moves to a
