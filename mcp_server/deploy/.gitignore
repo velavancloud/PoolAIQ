@@ -1,0 +1,9 @@
+# Real Terraform state and variable files contain secrets/infrastructure
+# details that should never be committed — only the .example files and
+# the .tf definitions themselves are source-controlled.
+
+**/terraform.tfvars
+**/*.tfstate
+**/*.tfstate.backup
+**/.terraform/
+**/.terraform.lock.hcl

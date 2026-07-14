@@ -1,0 +1,39 @@
+# Copy this file to terraform.tfvars and fill in real values.
+# terraform.tfvars is gitignored (see deploy/.gitignore) — never commit
+# real secrets to version control.
+
+aws_region              = "us-east-1"
+deployment_environment  = "ec2-staging"
+instance_type           = "t3.micro"
+
+# REPLACE with a real AMI ID for your region — Ubuntu 22.04 LTS.
+# Find current ones at https://cloud-images.ubuntu.com/locator/ec2/
+ami_id = "ami-0REPLACE-WITH-REAL-AMI-ID"
+
+# An EC2 key pair name that already exists in your AWS account
+ssh_key_name = "your-key-pair-name"
+
+mcp_port = 8420
+
+# CIDR blocks allowed to reach the MCP server. Example: if your webapp
+# also runs on EC2 in the same VPC, use that subnet's CIDR. For a fully
+# public demo (understanding the tradeoff), use ["0.0.0.0/0"] explicitly.
+allowed_cidr_blocks = ["203.0.113.0/24"]  # REPLACE with your actual range
+
+# CIDR blocks allowed to SSH in for debugging — your own IP, not 0.0.0.0/0
+ssh_allowed_cidr_blocks = ["203.0.113.5/32"]  # REPLACE with your IP
+
+# Generate a real random value, e.g.: openssl rand -hex 32
+mcp_server_api_key = "REPLACE-WITH-A-REAL-RANDOM-SECRET"
+
+# Optional — leave blank to deploy without server-side inference
+anthropic_api_key = ""
+
+# Fill in once you know the Elastic IP, or leave blank and update after
+# first apply (terraform output will show the assigned IP)
+public_registration_url = ""
+
+# Build and push mcp_server/Dockerfile to a registry first:
+#   docker build -f mcp_server/Dockerfile -t YOUR_ECR_REPO:latest .
+#   docker push YOUR_ECR_REPO:latest
+docker_image = "YOUR_ECR_REPO:latest"
