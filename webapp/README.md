@@ -43,6 +43,12 @@ demoing somewhere without reliable wifi/API access.
   the new reading.
 - **Hard safety gates**: `active_wait_window()` checks run before any pattern
   detection, exactly as documented in `../README.md` Section 4, principle 2.
+- **MCP tool calls**: product recommendations and the Approve button's
+  notification dispatch both go through a real MCP server subprocess
+  (`../mcp_server/server.py`), via the sync bridge in `mcp_client.py` — not
+  direct Python imports. See `../README.md` Section 3b for the full
+  architecture and `../mcp_server/test_mcp_client.py` for a protocol-level
+  test independent of the webapp.
 
 ## What's simplified for the demo (be upfront about this to the panel)
 
@@ -62,12 +68,24 @@ demoing somewhere without reliable wifi/API access.
 1. **Open with the thesis, not the tool.** "Retail pool stores test water in
    isolation each visit. This is what happens when a system remembers."
 
-2. **Click "Jun 29 — pH overcorrected."** Point out: engine gives standard
+2. **Click "Jun 21 — Low CYA, MCP product lookup."** Point out the product
+   card that appears under the recommendation, tagged *"via mcp:
+   find_product."* Say explicitly: *"This system never hand-codes 'if low
+   CYA, say buy Conditioner.' It calls out to an external tool over the
+   actual Model Context Protocol — the same protocol Claude uses for tool
+   use generally. Right now that tool is backed by a small stub catalog,
+   but the protocol boundary means swapping in a real Leslie's or Amazon
+   API later only touches one file, not every place a product gets
+   recommended."* Click **Approve & create task** — narrate that this
+   fires a second, real MCP call (`send_task_notification`) and show the
+   confirmation message with the returned notification id and timestamp.
+
+3. **Click "Jun 29 — pH overcorrected."** Point out: engine gives standard
    symptom-level advice here — same as any retail store would, because there
    isn't enough history yet to see a pattern. This is intentionally the
    "boring" baseline case.
 
-3. **Click "Jul 03 — pH recurs."** This is the moment. Point out the
+4. **Click "Jul 03 — pH recurs."** This is the moment. Point out the
    root-cause flag: *"pH is unstable AND Total Alkalinity has been reading
    high."* Explain: **this exact reading, at a real Leslie's visit, produced
    a treatment plan that only addressed pH — not alkalinity.** The system
@@ -81,18 +99,22 @@ demoing somewhere without reliable wifi/API access.
    chemistry knowledge base AND retrieved prior readings from this specific
    pool. You can inspect exactly what informed this recommendation."*
 
-4. **Click "Jul 11 — stabilized."** Show the system doesn't just keep firing
+5. **Click "Jul 11 — stabilized."** Show the system doesn't just keep firing
    the same pattern forever — it recognizes resolution and moves to a
    different, current issue (chlorine too high to swim yet).
 
-5. **If time/API access allows: live upload.** Take out your phone, photograph
+6. **If time/API access allows: live upload.** Take out your phone, photograph
    a test strip (even a random one, or reuse a photo from
    `../docs/timeline-photos/`), upload it live. Narrate the extraction JSON
    as it streams back, then the recommendation.
 
-6. **Close on the approval gate.** Click Approve/Reject to show the
-   human-in-the-loop is a real, non-bypassable step in the flow — not a
-   footnote.
+7. **If asked "is that MCP call actually real or just an API route":** open
+   a terminal and run `python3 ../mcp_server/test_mcp_client.py` live. This
+   bypasses the webapp entirely — a standalone MCP client spawning the
+   server as its own subprocess and calling all three tools over stdio,
+   with the SDK's own protocol-level logging (`ListToolsRequest`,
+   `CallToolRequest`) visible in the output. This is the strongest single
+   piece of evidence that the MCP integration isn't decorative.
 
 ## Known rough edges (own these, don't hide them)
 

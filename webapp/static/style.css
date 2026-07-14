@@ -507,6 +507,55 @@ body {
   transition: width 0.5s ease;
 }
 
+/* ---------- MCP product lookup card ---------- */
+
+.product-card {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: var(--paper-dim);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.product-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.product-card-tag {
+  font-family: var(--font-display);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--pool-surface);
+  margin-bottom: 4px;
+}
+
+.product-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.product-card-meta {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.product-card-price {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--pool-deep);
+  white-space: nowrap;
+}
+
 /* ---------- Retrieval / RAG citations ---------- */
 
 .retrieval-block {

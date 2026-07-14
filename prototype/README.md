@@ -47,6 +47,21 @@ This replays three real moments from the actual case study timeline (see
   remain non-LLM and non-overridable, per the safety design principle in the
   main README.
 
+## Changelog
+
+- **Bug found and fixed during MCP integration testing:** `active_wait_window()`
+  didn't check that an addition's timestamp was actually before the query
+  timestamp — a query for a point in time (e.g. 2026-06-21) that came
+  BEFORE a later addition in the data (2026-06-30) would incorrectly treat
+  that future addition as an active wait window, blocking any
+  recommendation. Fixed by requiring `0 <= elapsed < requires_wait_hours`
+  instead of just `elapsed < requires_wait_hours`. Caught because building
+  the MCP demo scenario for `product_recommendation` (June 21) exercised a
+  code path the original three scenarios (June 29 / July 3 / July 11, all
+  later in the timeline than every addition in the dataset) never hit —
+  worth noting as a case for testing multiple points across a timeline,
+  not just monotonically-later ones.
+
 ## Known simplifications (documented, not hidden)
 
 - `IDEAL_RANGES` doesn't yet account for pool-specific factors (surface type

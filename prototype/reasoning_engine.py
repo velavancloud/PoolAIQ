@@ -82,10 +82,26 @@ class PoolState:
         return matches[-1] if matches else None
 
     def active_wait_window(self, as_of: datetime) -> Optional[Addition]:
-        """Return the most recent addition whose wait window hasn't elapsed yet, if any."""
+        """
+        Return the most recent addition whose wait window hasn't elapsed yet,
+        as of the given timestamp.
+
+        Bug fixed here (caught during MCP integration testing, see
+        prototype/README.md changelog): additions that occur AFTER as_of
+        (negative elapsed time — i.e. the addition hasn't happened yet from
+        this query's point of view) must never be treated as an active wait
+        window. The original version only checked `elapsed < requires_wait_hours`,
+        which is also true for large negative elapsed values, incorrectly
+        gating recommendations for any as_of timestamp earlier than a later
+        addition in the data. This only surfaced when a demo scenario
+        queried a point in time (2026-06-21) that came before an addition
+        recorded later in the case study (2026-06-30) — worth existing as a
+        cautionary example of why testing multiple points across a timeline,
+        not just the latest one, matters.
+        """
         for a in reversed(self.additions):
             elapsed = (as_of - a.added_at).total_seconds() / 3600
-            if elapsed < a.requires_wait_hours:
+            if 0 <= elapsed < a.requires_wait_hours:
                 return a
         return None
 

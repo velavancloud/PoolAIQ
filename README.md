@@ -27,7 +27,7 @@ it is built. Here is what's real vs. designed-but-not-built:
 | Human-in-the-loop approval | **Built (UI only)** | Approve/Reject buttons work and gate the demo flow, but don't write to a real task queue |
 | Task/notification engine | **Not built** | `api/task_schema.json` documents the intended shape; no SMS/push code exists |
 | Commerce hook | **Not built** | Documented in Section 3 only |
-| MCP (tool-use protocol) | **Not built, not previously claimed** | No MCP server exists in this project |
+| MCP (tool-use protocol) | **Built** | Real MCP server (`mcp_server/`) with two tools — `find_product` and `send_task_notification` — running over the actual stdio protocol (verified via a real MCP client subprocess handshake, not just decorated functions). See Section 3b. |
 | Multi-agent orchestration | **Not built, not previously claimed** | This is a single Flask app calling two Python functions sequentially — one LLM call (extraction) and one deterministic function (reasoning). Not a multi-agent system. |
 
 **Why this table exists:** an earlier draft of this README described the
@@ -213,6 +213,78 @@ having the list. Real RAG needs three things that weren't there:
   constraints allow deploying one) would materially improve retrieval
   quality here, beyond what better keyword engineering could fix.
 
+## 3b. MCP — One Protocol Boundary for External Resources
+
+### Why this matters architecturally, not just as a checkbox
+
+Before this was built, `webapp/app.py` would have needed to directly import
+a product catalog module and a notification-sending module — and every
+future consumer of PoolAIQ's reasoning output (a CLI tool, a second web
+app, an SMS-in webhook that lets a user text a photo directly) would need
+its own copy of that same import logic. Swapping the stub product catalog
+for a real Leslie's API, or the stub notification log for real Twilio,
+would mean hunting down every call site across every consumer.
+
+MCP collapses this to one boundary: any MCP client — this webapp, a future
+CLI, Claude itself in an agentic workflow — talks to `mcp_server/server.py`
+the same way, over the same protocol, regardless of what's actually running
+behind the tools.
+
+### What's built (`mcp_server/`)
+
+- `server.py` — a real MCP server using the official Anthropic `mcp` SDK's
+  `FastMCP` interface, exposing three tools:
+  - `find_product(product_category, issue)` — looks up which product
+    addresses a chemistry issue or product category
+  - `send_task_notification(channel, to, body, task_id)` — dispatches an
+    SMS/push notification
+  - `get_notification_log()` — returns everything sent so far (debug/demo)
+- `catalog_data.py` — a 9-product stub catalog standing in for a real
+  retailer API (Leslie's, Amazon)
+- `notification_store.py` — an in-memory stub standing in for a real
+  SMS/push provider (Twilio, OneSignal)
+- `test_mcp_client.py` — a **real MCP client** that spawns `server.py` as a
+  subprocess and calls all three tools over the actual stdio protocol
+  (`ListToolsRequest`/`CallToolRequest`, logged by the SDK itself) —
+  this is the file that proves the server genuinely speaks MCP rather than
+  being Python functions with `@mcp.tool()` decorators that are never
+  actually invoked through the protocol layer
+- `webapp/mcp_client.py` — a sync bridge Flask's request handlers use to
+  call the MCP server (Flask's dev server is synchronous; the MCP SDK's
+  client is async — this module spins up a short-lived event loop per call)
+
+### How it's wired into the demo
+
+`webapp/app.py`'s `enrich_with_product_lookup()` calls `find_product` via
+MCP whenever the reasoning engine's output includes a `product_category` —
+visible in the UI as a product card tagged "via mcp: find_product" with
+real SKU/price/size data, not a hardcoded string.
+
+The `/api/approve` endpoint calls `send_task_notification` via MCP only
+after the human clicks Approve in the UI — this is the actual enforcement
+of `requires_human_approval: true` (from `prompts/reasoning_prompt.md`'s
+output schema) at the route level, not just a UI state that has no backend
+effect.
+
+### Honest tradeoffs, stated plainly
+
+- **Stub backends.** `catalog_data.py` and `notification_store.py` are
+  hand-written stand-ins, not real API integrations. What's real is the
+  protocol boundary — swapping in a real Leslie's product API or a real
+  Twilio call means editing those two files only, not any calling code.
+- **Subprocess-per-call, not a persistent session.** `mcp_client.py` spawns
+  a fresh `server.py` subprocess for every single tool call (confirmed via
+  the `ListToolsRequest` log line appearing on every request in testing).
+  A production deployment would keep one long-lived MCP client
+  session (or a small connection pool) instead of paying subprocess-spawn
+  cost per request — this demo optimizes for "obviously correct and easy
+  to verify" over "fast," which is the right tradeoff for a capstone
+  artifact but not for production load.
+- **No auth on the MCP server.** Anyone who can spawn the subprocess can
+  call any tool. Fine for a local demo; a real deployment would need the
+  MCP SDK's auth support (visible in the SDK's `mcp.server.auth` module,
+  not used here).
+
 ## 4. Core Design Principles
 
 1. **Memory over memory-less advice.** Every recommendation must cite what's already in the water and what's already been tried.
@@ -244,7 +316,8 @@ having the list. Real RAG needs three things that weren't there:
 - `prompts/extraction_prompt.md` — the vision extraction system prompt
 - `prompts/reasoning_prompt.md` — the recommendation engine system prompt
 - `api/task_schema.json` — task/notification object shape
-- `prototype/` — working, tested Python reasoning engine, replayed against the real timeline data (see `prototype/README.md`)
+- `prototype/` — working, tested Python reasoning engine + RAG layer, replayed against the real timeline data (see `prototype/README.md`)
+- `mcp_server/` — real MCP server (product lookup + notification dispatch tools) with a protocol-level client test (see Section 3b)
 
 ## 7. Evaluation / Success Metrics
 

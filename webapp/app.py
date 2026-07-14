@@ -29,6 +29,12 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "prototype"))
 from reasoning_engine import PoolState, Reading, recommend, IDEAL_RANGES  # noqa: E402
 from case_study_data import build_case_study_state  # noqa: E402
 
+# MCP client bridge — all product lookups and notification dispatch go
+# through the real MCP server subprocess, not direct imports of
+# mcp_server/catalog_data.py or notification_store.py. See mcp_client.py
+# for why this boundary matters.
+from mcp_client import find_product_via_mcp, send_notification_via_mcp  # noqa: E402
+
 app = Flask(__name__)
 
 EXTRACTION_PROMPT_PATH = os.path.join(
@@ -89,6 +95,36 @@ def extract_reading_from_photo(image_bytes: bytes, media_type: str) -> dict:
         if text.startswith("json"):
             text = text[4:]
     return json.loads(text)
+
+
+def enrich_with_product_lookup(recommendation: dict) -> dict:
+    """
+    Calls the real MCP server (via mcp_client.py) to look up a product for
+    the recommendation's proposed action, and attaches it as
+    proposed_action.product_lookup. This is the concrete proof that the
+    reasoning engine's output flows through the MCP tool boundary rather
+    than the webapp hand-coding "if category == acid, say Muriatic Acid"
+    inline.
+
+    Failure is non-fatal: if the MCP subprocess call fails for any reason
+    (e.g. not installed in some environment), the recommendation still
+    returns — product_lookup is just omitted, with the error visible for
+    debugging. A missing product suggestion should never block a safety
+    recommendation from reaching the user.
+    """
+    action = recommendation.get("proposed_action", {})
+    category = action.get("product_category", "")
+    if not category or category == "unknown":
+        return recommendation
+
+    try:
+        lookup = find_product_via_mcp(product_category=category)
+        recommendation["proposed_action"]["product_lookup"] = lookup
+        recommendation["proposed_action"]["product_lookup_source"] = "mcp:find_product"
+    except Exception as e:
+        recommendation["proposed_action"]["product_lookup_error"] = str(e)
+
+    return recommendation
 
 
 @app.route("/")
@@ -159,6 +195,7 @@ def analyze():
     state.readings.append(new_reading)
 
     recommendation = recommend(state, now)
+    recommendation = enrich_with_product_lookup(recommendation)
 
     return jsonify({
         "extraction": extraction,
@@ -183,7 +220,10 @@ def analyze_demo():
 
     state = build_case_study_state()
 
-    if scenario == "early_no_pattern":
+    if scenario == "product_recommendation":
+        as_of = state.readings[0].read_at
+        state.readings = state.readings[:1]
+    elif scenario == "early_no_pattern":
         as_of = state.readings[2].read_at
         state.readings = state.readings[:3]
     elif scenario == "root_cause_detected":
@@ -193,6 +233,7 @@ def analyze_demo():
         as_of = state.readings[-1].read_at + timedelta(hours=1)
 
     recommendation = recommend(state, as_of)
+    recommendation = enrich_with_product_lookup(recommendation)
     latest = state.readings[-1]
 
     return jsonify({
@@ -211,6 +252,37 @@ def analyze_demo():
         "recommendation": recommendation,
         "history_length_used": len(state.readings),
     })
+
+
+@app.route("/api/approve", methods=["POST"])
+def approve_task():
+    """
+    Called when the user clicks "Approve & create task" in the UI. Dispatches
+    a REAL notification through the MCP server's send_task_notification
+    tool — this is the human-in-the-loop gate from README.md Section 4
+    actually connected to an external-resource call, not just a UI state
+    change with no backend effect.
+
+    Note this endpoint is only reachable AFTER the human approval click —
+    the reasoning engine and enrich_with_product_lookup never call
+    send_notification_via_mcp themselves. That ordering is the actual
+    enforcement of "human_in_the_loop: always true" from
+    prompts/reasoning_prompt.md — approval gates the notification at the
+    route level, not just in the UI.
+    """
+    body = request.get_json(force=True) or {}
+    instructions = body.get("instructions", "No instructions provided.")
+
+    try:
+        result = send_notification_via_mcp(
+            channel="sms",
+            to="+1-704-555-0100",  # demo phone number, hardcoded for this capstone
+            body=f"PoolAIQ (approved): {instructions}",
+            task_id=body.get("task_id", ""),
+        )
+        return jsonify({"approved": True, "notification": result})
+    except Exception as e:
+        return jsonify({"approved": True, "notification_error": str(e)}), 200
 
 
 if __name__ == "__main__":

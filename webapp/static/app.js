@@ -236,21 +236,71 @@ function renderResult(data) {
   const action = rec.proposed_action || {};
   actionType.textContent = (action.type || 'unknown').replace(/_/g, ' ');
   actionInstructions.textContent = action.instructions || 'No specific instructions.';
+  renderProductCard(action);
 
   const conf = rec.confidence || 0;
   confidenceFill.style.width = `${conf * 100}%`;
   confidenceValue.textContent = `${Math.round(conf * 100)}%`;
 
-  approveBtn.onclick = () => showApprovalConfirm(true);
-  rejectBtn.onclick = () => showApprovalConfirm(false);
+  approveBtn.onclick = () => handleApproval(true, action.instructions);
+  rejectBtn.onclick = () => handleApproval(false, action.instructions);
 }
 
-function showApprovalConfirm(approved) {
-  approvalConfirm.hidden = false;
-  approvalConfirm.className = 'approval-confirm ' + (approved ? 'approved' : 'rejected');
-  approvalConfirm.textContent = approved
-    ? '✓ Approved — task would be created and a reminder scheduled per the notification_plan in api/task_schema.json.'
-    : '✗ Rejected — no task created. In production this would prompt PoolAIQ to ask what\'s wrong with the recommendation.';
+async function handleApproval(approved, instructions) {
+  if (!approved) {
+    approvalConfirm.hidden = false;
+    approvalConfirm.className = 'approval-confirm rejected';
+    approvalConfirm.textContent = '✗ Rejected — no task created, no notification sent.';
+    return;
+  }
+
+  approveBtn.disabled = true;
+  approveBtn.textContent = 'Sending via MCP…';
+
+  try {
+    const res = await fetch('/api/approve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instructions, task_id: 'demo_task_' + Date.now() }),
+    });
+    const data = await res.json();
+    approvalConfirm.hidden = false;
+    approvalConfirm.className = 'approval-confirm approved';
+    if (data.notification) {
+      approvalConfirm.textContent =
+        `✓ Approved — notification dispatched via MCP (send_task_notification). ` +
+        `id: ${data.notification.notification_id}, sent: ${new Date(data.notification.sent_at).toLocaleTimeString()}`;
+    } else {
+      approvalConfirm.textContent = '✓ Approved, but notification dispatch had an issue: ' + (data.notification_error || 'unknown');
+    }
+  } catch (err) {
+    approvalConfirm.hidden = false;
+    approvalConfirm.className = 'approval-confirm rejected';
+    approvalConfirm.textContent = '✗ Could not reach approval endpoint: ' + err.message;
+  }
+
+  approveBtn.disabled = false;
+  approveBtn.textContent = 'Approve & create task';
+}
+
+const productCard = document.getElementById('productCard');
+
+function renderProductCard(action) {
+  const lookup = action.product_lookup;
+  if (!lookup || !lookup.found || !lookup.products || lookup.products.length === 0) {
+    productCard.hidden = true;
+    return;
+  }
+  const p = lookup.products[0];
+  productCard.hidden = false;
+  productCard.innerHTML = `
+    <div class="product-card-info">
+      <span class="product-card-tag">via mcp: find_product</span>
+      <span class="product-card-name">${p.name} — ${p.brand}</span>
+      <span class="product-card-meta">${p.size} · SKU ${p.sku}</span>
+    </div>
+    <span class="product-card-price">$${p.price_usd.toFixed(2)}</span>
+  `;
 }
 
 function renderError(message) {

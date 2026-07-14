@@ -51,6 +51,10 @@
       <div class="divider"><span>or replay case study</span></div>
 
       <div class="scenario-list">
+        <button class="scenario-btn" data-scenario="product_recommendation">
+          <span class="scenario-date">Jun 21</span>
+          <span class="scenario-label">Low CYA — MCP product lookup</span>
+        </button>
         <button class="scenario-btn" data-scenario="early_no_pattern">
           <span class="scenario-date">Jun 29</span>
           <span class="scenario-label">pH overcorrected — early signal</span>
@@ -94,6 +98,7 @@
           <div class="block-label">Proposed action</div>
           <div class="action-type" id="actionType"></div>
           <p class="action-instructions" id="actionInstructions"></p>
+          <div class="product-card" id="productCard" hidden></div>
         </div>
 
         <div class="approval-block">
